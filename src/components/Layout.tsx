@@ -7,9 +7,10 @@ import { useRef, useEffect } from "react";
 interface LayoutProps {
   children: React.ReactNode;
   onRecClick?: () => void;
+  showSearchBar?: boolean;
 }
 
-export function Layout({ children, onRecClick }: LayoutProps) {
+export function Layout({ children, onRecClick, showSearchBar = true }: LayoutProps) {
   const { position, coordinates, setCoordinates, isDragging, setIsDragging, isPanelVisible, panelHeight } = usePanelPosition();
   const panelRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -117,7 +118,7 @@ export function Layout({ children, onRecClick }: LayoutProps) {
         >
           {/* Header - Fixed at top */}
           <div className="flex-shrink-0 px-3 pt-4">
-            <Header onRecClick={onRecClick} />
+            <Header onRecClick={onRecClick} showSearchBar={showSearchBar} />
           </div>
 
           {/* Main Content - Scrollable */}

@@ -1,14 +1,19 @@
 import svgPaths from "../imports/svg-s04gq19zek";
 import { useState, useEffect, useRef } from "react";
 import { LanguageSelector } from "./LanguageSelector";
+import { SettingsMenu } from "./SettingsMenu";
 import { usePanelPosition } from "../contexts/PanelPositionContext";
+import { useAuth } from "../contexts/AuthContext";
 
 interface HeaderProps {
   onRecClick?: () => void;
+  showSearchBar?: boolean;
 }
 
-export function Header({ onRecClick }: HeaderProps) {
+export function Header({ onRecClick, showSearchBar = true }: HeaderProps) {
+  const { isAuthenticated } = useAuth();
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [isMicActive, setIsMicActive] = useState(false);
@@ -137,35 +142,44 @@ export function Header({ onRecClick }: HeaderProps) {
             </button>
           )}
           
-          <button
-            className="hover:opacity-80 transition-opacity"
-            aria-label="Settings"
-          >
-            <div className="size-6">
-              <svg
-                className="block size-full"
-                fill="none"
-                preserveAspectRatio="none"
-                viewBox="0 0 24 24"
-              >
-                <g clipPath="url(#clip0_settings)">
-                  <path
-                    d={svgPaths.p3a43e300}
-                    fill="#8E8E93"
-                  />
-                </g>
-                <defs>
-                  <clipPath id="clip0_settings">
-                    <rect
-                      fill="white"
-                      height="24"
-                      width="24"
+          <div className="relative">
+            <button
+              onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+              className="hover:opacity-80 transition-opacity"
+              aria-label="Settings"
+            >
+              <div className="size-6">
+                <svg
+                  className="block size-full"
+                  fill="none"
+                  preserveAspectRatio="none"
+                  viewBox="0 0 24 24"
+                >
+                  <g clipPath="url(#clip0_settings)">
+                    <path
+                      d={svgPaths.p3a43e300}
+                      fill="#8E8E93"
                     />
-                  </clipPath>
-                </defs>
-              </svg>
-            </div>
-          </button>
+                  </g>
+                  <defs>
+                    <clipPath id="clip0_settings">
+                      <rect
+                        fill="white"
+                        height="24"
+                        width="24"
+                      />
+                    </clipPath>
+                  </defs>
+                </svg>
+              </div>
+            </button>
+            
+            {/* Settings Menu - Only show when authenticated */}
+            {isAuthenticated && showSettingsMenu && (
+              <SettingsMenu onClose={() => setShowSettingsMenu(false)} />
+            )}
+          </div>
+          
           <button
             onClick={handleClose}
             className="w-6 h-6 border-2 border-[#8e8e93] rounded flex items-center justify-center hover:bg-gray-100 transition-colors"
@@ -189,7 +203,7 @@ export function Header({ onRecClick }: HeaderProps) {
       </header>
 
       {/* Search Bar - Only Visible When Scrolled */}
-      {isScrolled && (
+      {showSearchBar && isScrolled && (
         <div className="w-full mb-7 relative">
           <div className="relative bg-[#d9d9d9] rounded-[30px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] h-[42px] flex items-center px-5">
             <div className="size-6 shrink-0">
@@ -284,7 +298,7 @@ export function Header({ onRecClick }: HeaderProps) {
       )}
 
       {/* Search Bar - Visible by default, hides on scroll */}
-      {!isScrolled && (
+      {showSearchBar && !isScrolled && (
         <div className="w-full mb-4 relative">
           <div className="relative bg-[#d9d9d9] rounded-[30px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] h-[42px] flex items-center px-5">
             <div className="size-6 shrink-0">

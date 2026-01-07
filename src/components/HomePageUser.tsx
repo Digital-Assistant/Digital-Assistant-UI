@@ -6,6 +6,8 @@ import { Countdown } from "./Countdown";
 import { RecordingScreen } from "./RecordingScreen";
 import { StepEditor } from "./StepEditor";
 import { SavingProgress } from "./SavingProgress";
+import { LoginScreen } from "./LoginScreen";
+import { useAuth } from "../contexts/AuthContext";
 
 type RecordingState = 'idle' | 'start' | 'countdown' | 'recording' | 'stepEditor' | 'saving';
 
@@ -15,6 +17,7 @@ interface CompletedStep {
 }
 
 export default function HomePageUser() {
+  const { isAuthenticated } = useAuth();
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [countdown, setCountdown] = useState(3);
   const [currentStep, setCurrentStep] = useState(1);
@@ -87,6 +90,15 @@ export default function HomePageUser() {
       }
     }
   }, [recordingState, countdown]);
+
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <Layout showSearchBar={false}>
+        <LoginScreen />
+      </Layout>
+    );
+  }
 
   return (
     <Layout onRecClick={handleRecClick}>
