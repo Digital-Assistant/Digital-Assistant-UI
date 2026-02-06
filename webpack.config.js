@@ -12,7 +12,6 @@
 const path = require("path");
 const webpack = require("webpack");
 const CopyPlugin = require("copy-webpack-plugin");
-// const transform = require("typescript-json/lib/transform").default; // Removed - not used in source code
 const Dotenv = require("dotenv-webpack");
 const CssMinimizerPlugin = require("css-minimizer-webpack-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
@@ -71,7 +70,7 @@ module.exports = (env, argv) => {
                     test: /\.(js|jsx)$/,
                     exclude: [
                         /(node_modules|bower_components)/,
-                        path.resolve(__dirname, "packages/core")
+                        path.resolve(__dirname, "UDAN-Core")
                     ],
                     loader: "babel-loader", // the loader which should be applied, it'll be resolved relative to the context
                     options: { presets: ["@babel/env", "@babel/preset-react"] }, // options for the loader
@@ -80,7 +79,7 @@ module.exports = (env, argv) => {
                     test: /\.(ts|tsx)$/,
                     exclude: [
                         /node_modules/,
-                        path.resolve(__dirname, "packages/core")
+                        path.resolve(__dirname, "UDAN-Core")
                     ],
                     loader: "ts-loader",
                 },
@@ -131,6 +130,12 @@ module.exports = (env, argv) => {
                         options: { name: "[name].svg" },
                     },
                 },
+                {
+                    test: /\.m?js/,
+                    resolve: {
+                        fullySpecified: false
+                    }
+                }
             ],
         },
         plugins: [
@@ -158,6 +163,7 @@ module.exports = (env, argv) => {
         resolve: {
             // options for resolving module requests
             // (does not apply to resolving of loaders)
+            symlinks: false,
             extensions: [".tsx", ".ts", ".js", ".css", ".scss"], // extensions that are used
             modules: ["./node_modules"], // directories where to look for modules (in order)
             alias: {

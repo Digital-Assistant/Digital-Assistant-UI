@@ -1,5 +1,5 @@
 {
-  "name": "Convert Figma Design to React",
+  "name": "UDAN-Frontend",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -58,6 +58,7 @@
     "@babel/preset-env": "^7.28.5",
     "@babel/preset-react": "^7.28.5",
     "@babel/preset-typescript": "^7.28.5",
+    "@digital-assistant/core": "file:./UDAN-Core",
     "@emotion/react": "^11.14.0",
     "@testing-library/react": "^16.3.1",
     "@types/jest": "^30.0.0",
@@ -111,6 +112,7 @@
     "start": "webpack --watch",
     "build:dev": "webpack --env build=development",
     "build": "webpack",
-    "build:prod": "webpack --env build=production"
+    "build:prod": "webpack --env build=production",
+    "build:qa": "webpack --env build=qa"
   }
 }
