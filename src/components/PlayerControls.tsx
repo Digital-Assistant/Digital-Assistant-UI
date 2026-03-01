@@ -3,36 +3,21 @@ import { IconButton } from "./IconButton";
 import { useState, useEffect } from "react";
 
 interface PlayerControlsProps {
+  status?: 'idle' | 'playing' | 'paused' | 'completed';
   onSkipPrevious?: () => void;
   onPlay?: () => void;
+  onPause?: () => void;
+  onReplay?: () => void;
   onSkipNext?: () => void;
-  onPlaybackComplete?: () => void;
 }
 
-export function PlayerControls({ onSkipPrevious, onPlay, onSkipNext, onPlaybackComplete }: PlayerControlsProps) {
-  // State: 'idle' | 'playing' | 'paused' | 'completed'
-  const [playState, setPlayState] = useState<'idle' | 'playing' | 'paused' | 'completed'>('idle');
-
-  // Simulate playback completion after 10 seconds for demo purposes
-  useEffect(() => {
-    if (playState === 'playing') {
-      const timer = setTimeout(() => {
-        setPlayState('completed');
-        onPlaybackComplete?.();
-      }, 10000); // 10 seconds
-
-      return () => clearTimeout(timer);
-    }
-  }, [playState, onPlaybackComplete]);
-
+export function PlayerControls({ status = 'idle', onSkipPrevious, onPlay, onPause, onReplay, onSkipNext }: PlayerControlsProps) {
   const handlePlayPause = () => {
-    if (playState === 'idle' || playState === 'paused') {
-      setPlayState('playing');
-      onPlay?.();
-    } else if (playState === 'playing') {
-      setPlayState('paused');
-    } else if (playState === 'completed') {
-      setPlayState('playing');
+    if (status === 'playing') {
+      onPause?.();
+    } else if (status === 'completed') {
+      onReplay?.();
+    } else {
       onPlay?.();
     }
   };
@@ -40,7 +25,7 @@ export function PlayerControls({ onSkipPrevious, onPlay, onSkipNext, onPlaybackC
   return (
     <div className="content-stretch flex gap-[10px] items-center px-0 py-4 rounded-[var(--widget-radius-sm)] w-full">
       {/* Skip Previous */}
-      <IconButton 
+      <IconButton
         onClick={onSkipPrevious}
         size="lg"
         aria-label="Skip previous"
@@ -60,18 +45,18 @@ export function PlayerControls({ onSkipPrevious, onPlay, onSkipNext, onPlaybackC
       </IconButton>
 
       {/* Play/Pause/Restart Button */}
-      <IconButton 
+      <IconButton
         onClick={handlePlayPause}
         size="lg"
         aria-label={
-          playState === 'playing' ? 'Pause' :
-          playState === 'completed' ? 'Restart' :
-          'Play'
+          status === 'playing' ? 'Pause' :
+            status === 'completed' ? 'Restart' :
+              'Play'
         }
       >
         <div className="size-[38px]">
           {/* Play Icon - Show when idle or paused */}
-          {(playState === 'idle' || playState === 'paused') && (
+          {(status === 'idle' || status === 'paused') && (
             <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 38 38">
               <g clipPath="url(#clip0_play_filled)">
                 <path d={svgPathsDetail.pb92c900} fill="hsl(var(--widget-icon-primary))" />
@@ -83,18 +68,18 @@ export function PlayerControls({ onSkipPrevious, onPlay, onSkipNext, onPlaybackC
               </defs>
             </svg>
           )}
-          
+
           {/* Pause Icon - Show when playing */}
-          {playState === 'playing' && (
+          {status === 'playing' && (
             <svg className="block size-full" fill="none" viewBox="0 0 38 38">
               <circle cx="19" cy="19" r="15.8333" fill="hsl(var(--widget-icon-primary))" />
               <rect x="13" y="11" width="4" height="16" rx="1" fill="white" />
               <rect x="21" y="11" width="4" height="16" rx="1" fill="white" />
             </svg>
           )}
-          
+
           {/* Restart Icon - Show when completed */}
-          {playState === 'completed' && (
+          {status === 'completed' && (
             <svg className="block size-full" fill="none" viewBox="0 0 38 38">
               <circle cx="19" cy="19" r="15.8333" fill="hsl(var(--widget-icon-primary))" />
               <path
@@ -110,7 +95,7 @@ export function PlayerControls({ onSkipPrevious, onPlay, onSkipNext, onPlaybackC
       </IconButton>
 
       {/* Skip Next */}
-      <IconButton 
+      <IconButton
         onClick={onSkipNext}
         size="lg"
         aria-label="Skip next"

@@ -3,12 +3,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Tab } from "./Tab";
 import { RecordingCard } from "./RecordingCard";
 import { RecordingDetail } from "./RecordingDetail";
-import { fetchSearchResults, fetchDomain, CONFIG, getRowObject } from "@digital-assistant/core";
+import { fetchSearchResults, fetchRecord, fetchDomain, CONFIG, getRowObject, StorageUtil } from "@digital-assistant/core";
 import { useAuth } from "../contexts/AuthContext";
 
 // Define interface for recording data
 interface Recording {
-  _id: string; // Ensure this matches API response
+  id: string; // Ensure this matches API response
   status: string;
   name: string;
   // Add other properties as needed based on API response
@@ -24,7 +24,13 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
   const [activeTab, setActiveTab] = useState<
     "trending" | "popular" | "latest"
   >("trending");
-  const [selectedRecording, setSelectedRecording] = useState<{ id: number; title: string } | null>(null);
+
+  // Initialize selectedRecording from local storage if available
+  const [selectedRecording, setSelectedRecording] = useState<any | null>(() => {
+    const stored = StorageUtil.getFromStore(CONFIG.SELECTED_RECORDING, false);
+    // Check if stored value is a valid object and not empty
+    return (stored && Object.keys(stored).length > 0) ? stored : null;
+  });
 
   // Data state
   const [searchResults, setSearchResults] = useState<Recording[]>([]);
@@ -92,6 +98,35 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
     }
   }, [isAuthenticated, isInitialized, debouncedKeyword]); // Depend on debouncedKeyword directly
 
+  // Handle Deep Linking (URL Query params)
+  useEffect(() => {
+    const initDeepLink = async () => {
+      if (!isAuthenticated || !isInitialized) return;
+
+      const searchParams = new URLSearchParams(window.location.search);
+      const sequenceId = searchParams.get(CONFIG.UDA_URL_Param);
+
+      if (sequenceId) {
+        try {
+          const domain = fetchDomain();
+          const record = await fetchRecord({
+            id: sequenceId,
+            domain: encodeURI(domain)
+          });
+
+          if (record) {
+            setSelectedRecording(record);
+            StorageUtil.setToStore(record, CONFIG.SELECTED_RECORDING, false);
+          }
+        } catch (e) {
+          console.error("Failed to load recording from URL:", e);
+        }
+      }
+    };
+
+    initDeepLink();
+  }, [isAuthenticated, isInitialized]);
+
   // Initial load & Search trigger
   useEffect(() => {
     if (isInitialized && isAuthenticated) {
@@ -126,8 +161,12 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
   if (selectedRecording) {
     return (
       <RecordingDetail
-        title={selectedRecording.title}
-        onBack={() => setSelectedRecording(null)}
+        data={selectedRecording}
+        title={getRowObject(selectedRecording).sequenceName}
+        onBack={() => {
+          setSelectedRecording(null);
+          StorageUtil.setToStore({}, CONFIG.SELECTED_RECORDING, false);
+        }}
       />
     );
   }
@@ -165,9 +204,12 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
           const { sequenceName } = getRowObject(recording);
           return (
             <RecordingCard
-              key={recording._id} // Assuming _id is unique
+              key={recording.id}
               title={sequenceName || "Untitled Recording"}
-              onClick={() => setSelectedRecording({ id: recording._id, title: sequenceName })}
+              onClick={() => {
+                setSelectedRecording(recording);
+                StorageUtil.setToStore(recording, CONFIG.SELECTED_RECORDING, false);
+              }}
             />
           );
         })}

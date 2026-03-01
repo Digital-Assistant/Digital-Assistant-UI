@@ -5,25 +5,15 @@ import { IconButton } from "./IconButton";
 import { cn } from "../lib/cn";
 
 interface FeedbackButtonsProps {
+  isLiked?: boolean;
+  isDisliked?: boolean;
   onLike?: () => void;
   onDislike?: () => void;
   onReport?: (issueType: string, description: string) => void;
 }
 
-export function FeedbackButtons({ onLike, onDislike, onReport }: FeedbackButtonsProps) {
-  const [isLiked, setIsLiked] = useState(false);
-  const [isDisliked, setIsDisliked] = useState(false);
+export function FeedbackButtons({ isLiked, isDisliked, onLike, onDislike, onReport }: FeedbackButtonsProps) {
   const [showReportDialog, setShowReportDialog] = useState(false);
-
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-    onLike?.();
-  };
-
-  const handleDislike = () => {
-    setIsDisliked(!isDisliked);
-    onDislike?.();
-  };
 
   const handleReportClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -38,8 +28,8 @@ export function FeedbackButtons({ onLike, onDislike, onReport }: FeedbackButtons
   return (
     <div className="flex gap-[10px] items-center">
       {/* Like */}
-      <IconButton 
-        onClick={handleLike}
+      <IconButton
+        onClick={onLike}
         size="md"
         aria-label="Like"
         className={cn(isLiked && "opacity-100")}
@@ -47,11 +37,11 @@ export function FeedbackButtons({ onLike, onDislike, onReport }: FeedbackButtons
         <div className="size-6">
           <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
             <g clipPath="url(#clip0_thumb_up)">
-              <path 
-                d={svgPathsDetail.p11b5d400} 
-                stroke="hsl(var(--widget-icon-primary))" 
-                strokeWidth="2" 
-                fill={isLiked ? "hsl(var(--widget-icon-active))" : "none"} 
+              <path
+                d={svgPathsDetail.p11b5d400}
+                stroke="hsl(var(--widget-icon-primary))"
+                strokeWidth="2"
+                fill={isLiked ? "hsl(var(--widget-icon-active))" : "none"}
               />
             </g>
             <defs>
@@ -64,8 +54,8 @@ export function FeedbackButtons({ onLike, onDislike, onReport }: FeedbackButtons
       </IconButton>
 
       {/* Dislike */}
-      <IconButton 
-        onClick={handleDislike}
+      <IconButton
+        onClick={onDislike}
         size="md"
         aria-label="Dislike"
         className={cn(isDisliked && "opacity-100")}
@@ -73,11 +63,11 @@ export function FeedbackButtons({ onLike, onDislike, onReport }: FeedbackButtons
         <div className="size-6">
           <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
             <g clipPath="url(#clip0_thumb_down)">
-              <path 
-                d={svgPathsDetail.pe9ecb00} 
-                stroke="hsl(var(--widget-icon-primary))" 
-                strokeWidth="2" 
-                fill={isDisliked ? "hsl(var(--widget-icon-active))" : "none"} 
+              <path
+                d={svgPathsDetail.pe9ecb00}
+                stroke="hsl(var(--widget-icon-primary))"
+                strokeWidth="2"
+                fill={isDisliked ? "hsl(var(--widget-icon-active))" : "none"}
               />
             </g>
             <defs>
@@ -91,7 +81,7 @@ export function FeedbackButtons({ onLike, onDislike, onReport }: FeedbackButtons
 
       {/* Report */}
       <div className="relative overflow-visible">
-        <IconButton 
+        <IconButton
           onClick={handleReportClick}
           size="md"
           aria-label="Report"
@@ -109,9 +99,9 @@ export function FeedbackButtons({ onLike, onDislike, onReport }: FeedbackButtons
             </svg>
           </div>
         </IconButton>
-        
+
         {showReportDialog && (
-          <ReportIssueDialog 
+          <ReportIssueDialog
             onSubmit={handleReportSubmit}
             onCancel={() => setShowReportDialog(false)}
           />

@@ -6,3 +6,4 @@ environments/
 .idea/
 package-lock.json
 UDAN-Core/
+dist/
