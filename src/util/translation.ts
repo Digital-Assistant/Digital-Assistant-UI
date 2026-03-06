@@ -1,5 +1,7 @@
-export const translate = (attr: string) => {
-    // Mock translation for now, return key or similar
-    // TODO: integrate i18next if required
-    return attr;
-}
+/**
+ * translation
+ *
+ * Re-exports the core SDK's translate function (i18next-backed)
+ * so the local mock is replaced with the real implementation.
+ */
+export { translate } from "@digital-assistant/core";

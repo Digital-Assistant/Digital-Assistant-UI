@@ -262,6 +262,7 @@ export function RecordingDetail(props: RecordingDetailProps) {
       setTimeout(() => {
         backNav(true);
         if (showLoader) showLoader(false);
+        if (refetchSearch) refetchSearch('on'); // refresh list so deleted item disappears
       }, CONFIG.indexInterval);
     }
   };

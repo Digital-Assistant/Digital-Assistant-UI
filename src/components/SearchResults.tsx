@@ -167,6 +167,13 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
           setSelectedRecording(null);
           StorageUtil.setToStore({}, CONFIG.SELECTED_RECORDING, false);
         }}
+        onDelete={() => {
+          setSelectedRecording(null);
+          StorageUtil.setToStore({}, CONFIG.SELECTED_RECORDING, false);
+        }}
+        refetchSearch={() => {
+          getSearchResults(0, true); // reload list after delete
+        }}
       />
     );
   }

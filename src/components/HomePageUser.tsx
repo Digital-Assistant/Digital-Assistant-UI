@@ -1,29 +1,48 @@
 import { useState, useCallback, useEffect } from "react";
+import { startRecording, cancelRecording, StorageUtil, CONFIG } from "@digital-assistant/core";
 import { Layout } from "./Layout";
 import { SearchResults } from "./SearchResults";
 import { StartRecording } from "./StartRecording";
 import { Countdown } from "./Countdown";
 import { RecordingScreen } from "./RecordingScreen";
-import { StepEditor } from "./StepEditor";
-import { SavingProgress } from "./SavingProgress";
 import { LoginScreen } from "./LoginScreen";
 import { useAuth } from "../contexts/AuthContext";
 
-type RecordingState = 'idle' | 'start' | 'countdown' | 'recording' | 'stepEditor' | 'saving';
-
-interface CompletedStep {
-  number: number;
-  title: string;
-}
+/**
+ * Recording states — stepEditor and saving are managed internally
+ * by RecordingScreen.tsx, so HomePageUser only tracks idle/start/countdown/recording.
+ */
+type RecordingState = 'idle' | 'start' | 'countdown' | 'recording';
 
 export default function HomePageUser() {
   const { isAuthenticated } = useAuth();
-  const [recordingState, setRecordingState] = useState<RecordingState>('idle');
-  const [countdown, setCountdown] = useState(3);
-  const [currentStep, setCurrentStep] = useState(1);
-  const [completedSteps, setCompletedSteps] = useState<CompletedStep[]>([]);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [displayKeyword, setDisplayKeyword] = useState("");
+
+  /**
+   * Initialise from storage — if recording was active before the page
+   * navigated/reloaded, restore the 'recording' state immediately so the
+   * user sees the RecordingScreen instead of the list.
+   */
+  const getInitialRecordingState = (): RecordingState => {
+    const stored = StorageUtil.getFromStore(CONFIG.RECORDING_SWITCH_KEY, true);
+    if (stored === true || stored === "true") return 'recording';
+    return 'idle';
+  };
+
+  const [recordingState, setRecordingState] = useState<RecordingState>(getInitialRecordingState);
+  const [countdown, setCountdown] = useState(3);
+
+  /**
+   * On mount: if recording was already active (page navigated during recording),
+   * re-attach click listeners so the SDK captures the new page's clicks too.
+   */
+  useEffect(() => {
+    const stored = StorageUtil.getFromStore(CONFIG.RECORDING_SWITCH_KEY, true);
+    if (stored === true || stored === "true") {
+      startRecording(); // re-attaches addBodyEvents on the new page
+    }
+  }, []);
 
   const handleSearchChange = useCallback((display: string, query: string) => {
     setDisplayKeyword(display);
@@ -39,58 +58,33 @@ export default function HomePageUser() {
     setCountdown(3);
   };
 
-  const handleContainerClick = () => {
-    setRecordingState('stepEditor');
-  };
-
-  const handleCloseStepEditor = () => {
-    setRecordingState('recording');
-  };
-
-  const handleSaveStep = (stepData: any) => {
-    // Add completed step
-    setCompletedSteps([...completedSteps, {
-      number: stepData.number,
-      title: stepData.title
-    }]);
-
-    // Move to next step
-    setCurrentStep(currentStep + 1);
-
-    // Stay in step editor for next step
-    // Or you can go back to recording: setRecordingState('recording');
-  };
-
-  const handleFinalSave = () => {
-    // Trigger saving progress
-    setRecordingState('saving');
-  };
-
+  /**
+   * Called by RecordingScreen on cancel or after successful save.
+   */
   const handleCancel = () => {
-    // Navigate back to search results
+    cancelRecording();
     setRecordingState('idle');
-    setCurrentStep(1);
-    setCompletedSteps([]);
   };
 
-  const handleSavingComplete = () => {
-    // Reset to initial state
-    setRecordingState('idle');
-    setCurrentStep(1);
-    setCompletedSteps([]);
+  const recordHandler = (action: string) => {
+    if (action === 'cancel') {
+      handleCancel();
+    }
   };
 
-  // Countdown timer effect
+  const refetchSearch = (_trigger?: string) => {
+    setSearchKeyword((prev) => prev);
+  };
+
+  // Countdown timer — activates SDK recording on the final tick
   useEffect(() => {
     if (recordingState === 'countdown') {
       if (countdown > 1) {
-        const timer = setTimeout(() => {
-          setCountdown(countdown - 1);
-        }, 1000);
+        const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
         return () => clearTimeout(timer);
       } else {
-        // When countdown reaches 1, wait 1 second then show recording screen
-        const timer = setTimeout(() => {
+        const timer = setTimeout(async () => {
+          await startRecording(); // sets window.isRecording + addBodyEvents()
           setRecordingState('recording');
         }, 1000);
         return () => clearTimeout(timer);
@@ -98,7 +92,6 @@ export default function HomePageUser() {
     }
   }, [recordingState, countdown]);
 
-  // Show login screen if not authenticated
   if (!isAuthenticated) {
     return (
       <Layout showSearchBar={false}>
@@ -109,28 +102,19 @@ export default function HomePageUser() {
 
   return (
     <Layout
-      onRecClick={handleRecClick}
+      onRecClick={recordingState === 'idle' ? handleRecClick : undefined}
       searchKeyword={displayKeyword}
       onSearchChange={handleSearchChange}
     >
       {recordingState === 'idle' && <SearchResults searchKeyword={searchKeyword} />}
       {recordingState === 'start' && <StartRecording onStart={handleStart} onCancel={handleCancel} />}
       {recordingState === 'countdown' && <Countdown count={countdown} />}
-      {recordingState === 'recording' && <RecordingScreen onContainerClick={handleContainerClick} onCancel={handleCancel} />}
-      {recordingState === 'stepEditor' && (
-        <StepEditor
-          onClose={handleCloseStepEditor}
-          stepNumber={currentStep}
-          completedSteps={completedSteps}
-          onSaveStep={handleSaveStep}
-          onFinalSave={handleFinalSave}
+      {recordingState === 'recording' && (
+        <RecordingScreen
           onCancel={handleCancel}
-        />
-      )}
-      {recordingState === 'saving' && (
-        <SavingProgress
-          totalSteps={completedSteps.length}
-          onComplete={handleSavingComplete}
+          recordHandler={recordHandler}
+          refetchSearch={refetchSearch}
+          config={typeof window !== 'undefined' ? (window as any).UDAGlobalConfig : undefined}
         />
       )}
     </Layout>
