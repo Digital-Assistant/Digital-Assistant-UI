@@ -96,7 +96,10 @@ export function RecordingScreen({
 
   // Listen for "updateRecordedData" — fired by core SDK on every captured click
   useEffect(() => {
-    const handler = () => loadRecordData();
+    const handler = () => {
+      console.log("UI: Received updateRecordedData event");
+      loadRecordData();
+    };
     on("updateRecordedData", handler);
     return () => off("updateRecordedData", handler);
   }, [loadRecordData]);
@@ -359,12 +362,13 @@ export function RecordingScreen({
     try {
       const instance = await postRecordSequenceData(_payload);   // ← core SDK
       if (instance) {
-        setSavedClickedDataPercent(Math.ceil(((savedClicks + 1) / totalClicks) * 100));
+        setSavedClickedDataPercent(100);
         addNotification(translate("savedSequence"), translate("savedSequenceDescription"), "success");
 
-        setTimeout(() => {
-          if (refetchSearch) refetchSearch("on");
-        }, CONFIG.indexInterval);
+        // Wait for indexing interval to ensure search results are updated before redirection
+        await new Promise(resolve => setTimeout(resolve, CONFIG.indexInterval));
+
+        if (refetchSearch) refetchSearch("on");
 
         StorageUtil.add(false, CONFIG.RECORDING_SWITCH_KEY, true);
         StorageUtil.add([], CONFIG.RECORDING_SEQUENCE, false);
@@ -679,7 +683,7 @@ export function RecordingScreen({
       ) : (
         <div className="w-full flex flex-col gap-3">
           {/* Completed steps (all except last) — read-only */}
-          {recordData.slice(0, -1).map((item, index) => (
+          {/* {recordData.slice(0, -1).map((item, index) => (
             <div
               key={`step-completed-${index}`}
               className="bg-white content-stretch flex gap-[10px] h-[44px] items-center px-[10px] rounded-[8px] border border-[#e0e0e0]"
@@ -688,7 +692,7 @@ export function RecordingScreen({
                 {index + 1}. {getStepLabel(item)}
               </span>
             </div>
-          ))}
+          ))} */}
 
           {/* Last step — shown in StepEditor for properties editing */}
           <StepEditor
