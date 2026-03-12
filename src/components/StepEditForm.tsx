@@ -1,4 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import {
+  validateStepNameWithProfanity,
+  UDAConsoleLogger,
+} from "@digital-assistant/core";
+import { addNotification } from "../util/addNotification";
 import svgPaths from "../imports/svg-ckbrelabtn";
 import svgPathsNew from "../imports/svg-k4wo7ducks";
 import svgPathsMulti from "../imports/svg-xxlbqiqnh7";
@@ -8,10 +13,22 @@ interface StepEditFormProps {
   initialTitle: string;
   initialDelay?: number;
   onSave: (data: { title: string; delay?: number }) => void;
+  onValidate?: (data: { title: string; delay?: number }) => void;
   onCancel: () => void;
+  validationCompleted?: boolean;
+  config?: any;
 }
 
-export function StepEditForm({ stepNumber, initialTitle, initialDelay, onSave, onCancel }: StepEditFormProps) {
+export function StepEditForm({
+  stepNumber,
+  initialTitle,
+  initialDelay,
+  onSave,
+  onValidate,
+  onCancel,
+  validationCompleted,
+  config = {}
+}: StepEditFormProps) {
   const [homeValue, setHomeValue] = useState(initialTitle);
   const [isEditingHome, setIsEditingHome] = useState(false);
   const [selectedType, setSelectedType] = useState("Link");
@@ -27,7 +44,17 @@ export function StepEditForm({ stepNumber, initialTitle, initialDelay, onSave, o
   const [showPermissions, setShowPermissions] = useState(false);
   const [isDoctorChecked, setIsDoctorChecked] = useState(false);
 
-  const handleSaveHome = () => {
+  const handleSaveHome = async () => {
+    const result = await validateStepNameWithProfanity(homeValue, config?.enableProfanity);
+    if (!result.success) {
+      addNotification("Validation Error", result.error || "Invalid name", "error");
+      return;
+    }
+
+    if (result.data?.hasProfanity) {
+      setHomeValue(result.data.cleanedValue);
+      addNotification("Profanity Detected", "Profanity has been removed from your step name.", "warning");
+    }
     setIsEditingHome(false);
   };
 
@@ -42,9 +69,32 @@ export function StepEditForm({ stepNumber, initialTitle, initialDelay, onSave, o
     }
   };
 
-  const handleSaveStep = () => {
+  const handleValidate = async () => {
+    const result = await validateStepNameWithProfanity(homeValue, config?.enableProfanity);
+    let finalTitle = homeValue;
+    if (result.success && result.data?.hasProfanity) {
+      finalTitle = result.data.cleanedValue;
+      setHomeValue(finalTitle);
+    }
+
+    if (onValidate) {
+      onValidate({
+        title: finalTitle,
+        delay: enableSlowReplay ? parseInt(delaySeconds) : undefined,
+      });
+    }
+  };
+
+  const handleSaveStep = async () => {
+    const result = await validateStepNameWithProfanity(homeValue, config?.enableProfanity);
+    let finalTitle = homeValue;
+    if (result.success && result.data?.hasProfanity) {
+      finalTitle = result.data.cleanedValue;
+      setHomeValue(finalTitle);
+    }
+
     onSave({
-      title: homeValue,
+      title: finalTitle,
       delay: enableSlowReplay ? parseInt(delaySeconds) : undefined,
     });
   };
@@ -156,17 +206,17 @@ export function StepEditForm({ stepNumber, initialTitle, initialDelay, onSave, o
                 </svg>
               )}
             </button>
-            <label 
+            <label
               onClick={() => setSkipDuringPlay(!skipDuringPlay)}
               className="font-['Jost',sans-serif] text-[16px] text-black leading-[1.5] whitespace-nowrap cursor-pointer"
             >
               Skip during play
             </label>
             <div className="relative">
-              <button 
+              <button
                 onMouseEnter={() => setShowSkipTooltip(true)}
                 onMouseLeave={() => setShowSkipTooltip(false)}
-                className="w-[18px] h-[18px] flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity" 
+                className="w-[18px] h-[18px] flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity"
                 aria-label="Info"
               >
                 <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 17 17">
@@ -175,7 +225,7 @@ export function StepEditForm({ stepNumber, initialTitle, initialDelay, onSave, o
                 </svg>
               </button>
               {showSkipTooltip && (
-                <div 
+                <div
                   onMouseEnter={() => setShowSkipTooltip(true)}
                   onMouseLeave={() => setShowSkipTooltip(false)}
                   className="absolute top-full left-0 mt-2 bg-black text-white text-[12px] px-3 py-2 rounded-md shadow-lg z-50 w-[200px]"
@@ -200,17 +250,17 @@ export function StepEditForm({ stepNumber, initialTitle, initialDelay, onSave, o
                 </svg>
               )}
             </button>
-            <label 
+            <label
               onClick={() => setPersonalInformation(!personalInformation)}
               className="font-['Jost',sans-serif] text-[16px] text-black leading-[1.5] whitespace-nowrap cursor-pointer"
             >
               Personal information
             </label>
             <div className="relative">
-              <button 
+              <button
                 onMouseEnter={() => setShowPersonalTooltip(true)}
                 onMouseLeave={() => setShowPersonalTooltip(false)}
-                className="w-[18px] h-[18px] flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity" 
+                className="w-[18px] h-[18px] flex items-center justify-center shrink-0 hover:opacity-80 transition-opacity"
                 aria-label="Info"
               >
                 <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 17 17">
@@ -219,7 +269,7 @@ export function StepEditForm({ stepNumber, initialTitle, initialDelay, onSave, o
                 </svg>
               </button>
               {showPersonalTooltip && (
-                <div 
+                <div
                   onMouseEnter={() => setShowPersonalTooltip(true)}
                   onMouseLeave={() => setShowPersonalTooltip(false)}
                   className="absolute top-full right-0 mt-2 bg-black text-white text-[12px] px-3 py-2 rounded-md shadow-lg z-50 w-[200px]"
@@ -320,15 +370,24 @@ export function StepEditForm({ stepNumber, initialTitle, initialDelay, onSave, o
 
         {/* Action Buttons */}
         <div className="flex gap-[10px] mb-3">
-          <button 
+          <button
             onClick={onCancel}
             className="flex-1 bg-[#969696] h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white hover:opacity-90 transition-opacity leading-[normal]"
           >
             Cancel
           </button>
-          <button 
+          {onValidate && (
+            <button
+              onClick={handleValidate}
+              className="flex-1 bg-blue-600 h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white hover:opacity-90 transition-opacity leading-[normal]"
+            >
+              Validate
+            </button>
+          )}
+          <button
             onClick={handleSaveStep}
-            className="flex-1 bg-black h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white hover:opacity-90 transition-opacity leading-[normal]"
+            disabled={onValidate && !validationCompleted}
+            className={`flex-1 bg-black h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white hover:opacity-90 transition-opacity leading-[normal] ${onValidate && !validationCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Save step
           </button>

@@ -5,11 +5,16 @@ import {
   togglePersonalInfo,
   updateTooltipMetadata,
   updateDelayTimeMetadata,
+  updateStepType,
   saveStepChanges,
   updateStepNameService,
   UDAConsoleLogger,
+  isHighlightNode,
+  fetchHtmlFormElements,
+  validateStepNameWithProfanity,
 } from "@digital-assistant/core";
 import { translate } from "../util/translation";
+import { addNotification } from "../util/addNotification";
 import svgPaths from "../imports/svg-ckbrelabtn";
 import svgPathsNew from "../imports/svg-k4wo7ducks";
 import svgPathsMulti from "../imports/svg-xxlbqiqnh7";
@@ -36,7 +41,7 @@ interface StepEditorProps {
   permissionsConfig?: any;
   tmpPermissions?: any;
   onPermissionsChange?: (key: string, value: any) => void;
-  enableSlowReplayGlobal?: boolean;
+  config?: any;
 }
 
 export function StepEditor({
@@ -55,7 +60,7 @@ export function StepEditor({
   permissionsConfig,
   tmpPermissions = {},
   onPermissionsChange,
-  enableSlowReplayGlobal
+  config = {},
 }: StepEditorProps) {
   const [showPermissions, setShowPermissions] = useState(false);
   const [isEditingHome, setIsEditingHome] = useState(false);
@@ -72,6 +77,7 @@ export function StepEditor({
   // Sequence-level state (unified naming)
   const [localSeqName, setLocalSeqName] = useState(sequenceName);
   const [localLabels, setLocalLabels] = useState(sequenceLabels);
+  const [optionsArray, setOptionsArray] = useState<any[]>([]);
 
   const currentStep = recordData[stepIndex];
   const stepMeta = currentStep ? (getObjData(currentStep.objectdata)?.meta ?? {}) : {};
@@ -79,14 +85,62 @@ export function StepEditor({
 
   useEffect(() => {
     if (currentStep) {
-      const meta = getObjData(currentStep.objectdata)?.meta ?? {};
+      const node = getObjData(currentStep.objectdata);
+      const meta = node?.meta ?? {};
       setHomeValue(meta.displayText || currentStep.clickednodename || "");
       setSkipDuringPlay(!!meta.skipDuringPlay);
       setPersonalInformation(!!meta.isPersonal);
-      setTooltipValue(meta.tooltip || "");
+      setTooltipValue(meta.tooltipInfo || "");
       if (meta.slowPlaybackTime) {
         setEnableSlowReplay(true);
         setDelaySeconds(String(meta.slowPlaybackTime));
+      }
+
+      // Generate options array
+      const currentSelectedElement = meta.selectedElement || {
+        inputElement: "",
+        inputType: "",
+        displayName: "Please Select",
+        systemTag: "",
+      };
+
+      const tempOptionsArray: any[] = [];
+      if (currentSelectedElement.inputElement === "") {
+        tempOptionsArray.push({
+          value: JSON.stringify(currentSelectedElement),
+          text: currentSelectedElement.displayName,
+        });
+      }
+
+      const elements = fetchHtmlFormElements();
+      for (const htmlFormElement of elements) {
+        tempOptionsArray.push({
+          value: JSON.stringify(htmlFormElement),
+          text: htmlFormElement.displayName,
+        });
+      }
+      setOptionsArray(tempOptionsArray);
+
+      // Set initial selected value for the dropdown
+      const isHighlight = isHighlightNode(node);
+      const matchedOption = tempOptionsArray.find(opt => {
+        try {
+          const val = JSON.parse(opt.value);
+          if (isHighlight && val.systemTag === 'highlight') return true;
+          if (currentSelectedElement.systemTag && val.systemTag === currentSelectedElement.systemTag) return true;
+          if (currentSelectedElement.displayName === val.displayName) return true;
+          return false;
+        } catch (e) {
+          return false;
+        }
+      });
+      if (matchedOption) {
+        setSelectedType(matchedOption.value);
+      } else if (isHighlight) {
+        // Fallback for Highlight if not found in matchedOption
+        setSelectedType("Highlight");
+      } else {
+        setSelectedType("Link");
       }
     }
   }, [stepIndex, recordData.length, currentStep]);
@@ -95,10 +149,23 @@ export function StepEditor({
   useEffect(() => setLocalSeqName(sequenceName), [sequenceName]);
   useEffect(() => setLocalLabels(sequenceLabels), [sequenceLabels]);
 
-  const handleSaveHome = () => {
+  const handleSaveHome = async () => {
+    const result = await validateStepNameWithProfanity(homeValue, config?.enableProfanity);
+    if (!result.success) {
+      addNotification("Validation Error", result.error || "Invalid name", "error");
+      return;
+    }
+
+    let processedValue = homeValue;
+    if (result.data?.hasProfanity) {
+      processedValue = result.data.cleanedValue;
+      setHomeValue(processedValue);
+      addNotification("Profanity Detected", "Profanity has been removed from your step name.", "warning");
+    }
+
     setIsEditingHome(false);
     if (storeRecording && recordData.length > 0) {
-      const updated = updateStepNameService(recordData, stepIndex, homeValue);
+      const updated = updateStepNameService(recordData, stepIndex, processedValue);
       storeRecording(updated);
     }
   };
@@ -122,29 +189,28 @@ export function StepEditor({
         delaySeconds
       });
     }
+    const profResult = await validateStepNameWithProfanity(homeValue, config?.enableProfanity);
+    let finalHomeValue = homeValue;
+    if (profResult.success && profResult.data?.hasProfanity) {
+      finalHomeValue = profResult.data.cleanedValue;
+      setHomeValue(finalHomeValue);
+    }
+
     if (storeRecording && recordData.length > 0) {
       const result = await saveStepChanges({
         recordData,
         index: stepIndex,
-        stepEditValue: homeValue,
+        stepEditValue: finalHomeValue,
         isUpdateMode: false,
+        tooltipInfo: tooltipValue,
+        slowPlaybackTime: enableSlowReplay ? parseFloat(delaySeconds) : undefined,
+        skipDuringPlay,
+        isPersonal: personalInformation,
       });
       if (result.success && result.data) {
         storeRecording(result.data);
       }
     }
-  };
-
-  const handleAddAlias = () => setLocalLabels([...localLabels, { label: "" }]);
-  const handleDeleteLabel = (index: number) => {
-    const updated = [...localLabels];
-    updated.splice(index, 1);
-    setLocalLabels(updated);
-  };
-  const handleLabelChange = (index: number, value: string) => {
-    const updated = [...localLabels];
-    updated[index] = { ...updated[index], label: value };
-    setLocalLabels(updated);
   };
 
   const handleFinalAction = () => {
@@ -155,6 +221,15 @@ export function StepEditor({
         additionalParams: tmpPermissions
       });
     }
+  };
+
+  const renderActionButtons = () => {
+    return (
+      <div className="flex gap-[10px] mb-3">
+        <button onClick={onCancel} className="flex-1 bg-[#969696] h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white">Cancel</button>
+        <button onClick={handleSaveStep} className="flex-1 bg-black h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white">Save step</button>
+      </div>
+    );
   };
 
   return (
@@ -191,50 +266,52 @@ export function StepEditor({
         </div>
 
         {/* Home/Title Field */}
-        <div className="px-4 mt-2">
-          {!isEditingHome ? (
-            <div className="relative bg-[#969696] h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center px-5">
-              <p className="font-['Roboto',sans-serif] text-[20px] text-white tracking-[0.25px] leading-[20px]">
-                {homeValue || (stepNumber === 1 ? "Home" : "Step Title")}
-              </p>
-              <button onClick={() => setIsEditingHome(true)} className="absolute right-3 w-6 h-6 hover:opacity-80 transition-opacity">
-                <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
-                  <path d={svgPaths.p157c33f0} fill="white" />
-                </svg>
-              </button>
-            </div>
-          ) : (
-            <div className="relative bg-white h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center pl-3 pr-14">
-              <input
-                type="text"
-                value={homeValue}
-                onChange={(e) => setHomeValue(e.target.value)}
-                className="flex-1 bg-transparent border-none outline-none font-['Roboto',sans-serif] text-[20px] text-black tracking-[0.25px] leading-[20px]"
-                autoFocus
-              />
-              <button onClick={handleSaveHome} className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-[30px]">
-                <svg className="block w-9 h-[42px]" fill="none" preserveAspectRatio="none" viewBox="0 0 36 42">
-                  <g filter="url(#filter0_dd_home_v2)">
-                    <rect fill="black" height="30" rx="4" width="28" x="4" y="4" />
-                    <path d="M10 19L15.25 24.25L25.75 13" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
-                  </g>
-                  <defs>
-                    <filter colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse" height="42" id="filter0_dd_home_v2" width="36" x="0" y="0">
-                      <feFlood floodOpacity="0" result="BackgroundImageFix" />
-                      <feColorMatrix in="SourceAlpha" result="hardAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
-                      <feOffset dy="4" />
-                      <feGaussianBlur stdDeviation="2" />
-                      <feComposite in2="hardAlpha" operator="out" />
-                      <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
-                      <feBlend in2="BackgroundImageFix" mode="normal" result="effect1_dropShadow_home" />
-                      <feBlend in="SourceGraphic" in2="effect1_dropShadow_home" mode="normal" result="shape" />
-                    </filter>
-                  </defs>
-                </svg>
-              </button>
-            </div>
-          )}
-        </div>
+        {config.enableEditClickedName && (
+          <div className="px-4 mt-2">
+            {!isEditingHome ? (
+              <div className="relative bg-[#969696] h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center px-5">
+                <p className="font-['Roboto',sans-serif] text-[20px] text-white tracking-[0.25px] leading-[20px]">
+                  {homeValue || (stepNumber === 1 ? "Home" : "Step Title")}
+                </p>
+                <button onClick={() => setIsEditingHome(true)} className="absolute right-3 w-6 h-6 hover:opacity-80 transition-opacity">
+                  <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
+                    <path d={svgPaths.p157c33f0} fill="white" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <div className="relative bg-white h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center pl-3 pr-14">
+                <input
+                  type="text"
+                  value={homeValue}
+                  onChange={(e) => setHomeValue(e.target.value)}
+                  className="flex-1 bg-transparent border-none outline-none font-['Roboto',sans-serif] text-[20px] text-black tracking-[0.25px] leading-[20px]"
+                  autoFocus
+                />
+                <button onClick={handleSaveHome} className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-[30px]">
+                  <svg className="block w-9 h-[42px]" fill="none" preserveAspectRatio="none" viewBox="0 0 36 42">
+                    <g filter="url(#filter0_dd_home_v2)">
+                      <rect fill="black" height="30" rx="4" width="28" x="4" y="4" />
+                      <path d="M10 19L15.25 24.25L25.75 13" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.25" />
+                    </g>
+                    <defs>
+                      <filter colorInterpolationFilters="sRGB" filterUnits="userSpaceOnUse" height="42" id="filter0_dd_home_v2" width="36" x="0" y="0">
+                        <feFlood floodOpacity="0" result="BackgroundImageFix" />
+                        <feColorMatrix in="SourceAlpha" result="hardAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" />
+                        <feOffset dy="4" />
+                        <feGaussianBlur stdDeviation="2" />
+                        <feComposite in2="hardAlpha" operator="out" />
+                        <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0" />
+                        <feBlend in2="BackgroundImageFix" mode="normal" result="effect1_dropShadow_home" />
+                        <feBlend in="SourceGraphic" in2="effect1_dropShadow_home" mode="normal" result="shape" />
+                      </filter>
+                    </defs>
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Properties Section */}
         <div className="px-4 mt-3">
@@ -242,24 +319,26 @@ export function StepEditor({
 
           {/* Checkboxes */}
           <div className="flex items-center gap-6 mb-5">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => {
-                  setSkipDuringPlay(!skipDuringPlay);
-                  if (storeRecording && recordData.length > 0) storeRecording(toggleSkipDuringPlay(recordData, stepIndex));
-                }}
-                className="w-[22px] h-[22px] border-2 border-black rounded bg-white flex items-center justify-center shrink-0"
-              >
-                {skipDuringPlay && <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12"><path d="M2 6L4.5 8.5L10 3" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-              </button>
-              <label className="font-['Jost',sans-serif] text-[14px] text-black">Skip during play</label>
-              <div className="relative">
-                <button onMouseEnter={() => setShowSkipTooltip(true)} onMouseLeave={() => setShowSkipTooltip(false)} className="w-[18px] h-[18px]">
-                  <svg className="block size-full" fill="none" viewBox="0 0 17 17"><circle cx="8.5" cy="8.5" fill="black" r="8.5" /><path d={svgPathsNew.p1e8c400} fill="white" /></svg>
+            {config.enableSkipDuringPlay && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    setSkipDuringPlay(!skipDuringPlay);
+                    if (storeRecording && recordData.length > 0) storeRecording(toggleSkipDuringPlay(recordData, stepIndex));
+                  }}
+                  className="w-[22px] h-[22px] border-2 border-black rounded bg-white flex items-center justify-center shrink-0"
+                >
+                  {skipDuringPlay && <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12"><path d="M2 6L4.5 8.5L10 3" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                 </button>
-                {showSkipTooltip && <div className="absolute top-full left-0 mt-2 bg-black text-white text-[12px] px-3 py-2 rounded-md z-50 w-[200px]">Skip this step during playback</div>}
+                <label className="font-['Jost',sans-serif] text-[14px] text-black">Skip during play</label>
+                <div className="relative">
+                  <button onMouseEnter={() => setShowSkipTooltip(true)} onMouseLeave={() => setShowSkipTooltip(false)} className="w-[18px] h-[18px]">
+                    <svg className="block size-full" fill="none" viewBox="0 0 17 17"><circle cx="8.5" cy="8.5" fill="black" r="8.5" /><path d={svgPathsNew.p1e8c400} fill="white" /></svg>
+                  </button>
+                  {showSkipTooltip && <div className="absolute top-full left-0 mt-2 bg-black text-white text-[12px] px-3 py-2 rounded-md z-50 w-[200px]">Skip this step during playback</div>}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex items-center gap-1.5">
               <button
@@ -281,22 +360,48 @@ export function StepEditor({
             </div>
           </div>
 
-          {/* Type Dropdown */}
-          <div className="mb-5">
-            <label className="font-['Montserrat',sans-serif] font-medium text-[16px] text-black mb-2 block">Type</label>
-            <div className="relative bg-white border border-neutral-300 h-[46px] rounded-[8px] flex items-center px-3">
-              <select value={selectedType} onChange={(e) => { setSelectedType(e.target.value); if (e.target.value === "Highlight") setIsEditingTooltip(true); }} className="flex-1 bg-transparent border-none outline-none font-['Raleway',sans-serif] text-[14px] text-black appearance-none cursor-pointer">
-                <option value="Link">Link</option>
-                <option value="Highlight">High Light</option>
-              </select>
-              <div className="absolute right-3 w-6 h-6 pointer-events-none">
-                <svg className="block size-full" fill="none" viewBox="0 0 24 24"><path d={svgPathsNew.p37cfbaf0} fill="black" /></svg>
+          {config.enableNodeTypeSelection && (
+            <div className="mb-5">
+              <label className="font-['Montserrat',sans-serif] font-medium text-[16px] text-black mb-2 block">Type</label>
+              <div className="relative bg-white border border-neutral-300 h-[46px] rounded-[8px] flex items-center px-3">
+                <select
+                  value={selectedType}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setSelectedType(newValue);
+
+                    let isHighlight = false;
+                    try {
+                      const parsed = JSON.parse(newValue);
+                      if (parsed.systemTag === 'highlight') isHighlight = true;
+                    } catch (e) {
+                      if (newValue === "Highlight") isHighlight = true;
+                    }
+
+                    if (isHighlight) setIsEditingTooltip(true);
+
+                    if (storeRecording && recordData.length > 0) {
+                      const updated = updateStepType(recordData, stepIndex, newValue);
+                      storeRecording(updated);
+                    }
+                  }}
+                  className="flex-1 bg-transparent border-none outline-none font-['Raleway',sans-serif] text-[14px] text-black appearance-none cursor-pointer"
+                >
+                  {optionsArray.map((eachOption) => (
+                    <option key={eachOption.text} value={eachOption.value}>
+                      {eachOption.text}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-3 w-6 h-6 pointer-events-none">
+                  <svg className="block size-full" fill="none" viewBox="0 0 24 24"><path d={svgPathsNew.p37cfbaf0} fill="black" /></svg>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Tooltip Input */}
-          {selectedType === "Highlight" && (
+          {config.enableTooltipAddition && (selectedType === "Highlight" || (typeof selectedType === 'string' && selectedType.includes('"systemTag":"highlight"'))) && (
             <div className="mb-5">
               <div className="relative bg-white h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center pl-3 pr-14">
                 <input type="text" value={tooltipValue} onChange={(e) => setTooltipValue(e.target.value)} placeholder="Custom Tool Tip (optional)" className="flex-1 bg-transparent border-none outline-none font-['Roboto',sans-serif] text-[14px] text-black" />
@@ -308,93 +413,29 @@ export function StepEditor({
           )}
 
           {/* Delay Input */}
-          <div className="mb-5">
-            <input
-              type="text"
-              placeholder="Delay in seconds (optional)"
-              value={delaySeconds}
-              onChange={(e) => setDelaySeconds(e.target.value)}
-              className="w-full bg-white border border-[#c8c8c8] h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] px-3 font-['Raleway',sans-serif] text-[14px] text-black outline-none"
-            />
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-[10px] mb-3">
-            <button onClick={onCancel} className="flex-1 bg-[#969696] h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white">Cancel</button>
-            <button onClick={handleSaveStep} className="flex-1 bg-black h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white">Save step</button>
-          </div>
-        </div>
-      </div>
-
-      {/* Labels Section (Bottom Card) */}
-      <div className="mt-3 rounded-[8px] overflow-hidden bg-[#d5d5d5] p-4 relative">
-        {/* Original SVG background to ensure exact matching */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-50" fill="none" preserveAspectRatio="none" viewBox="0 0 424 186">
-          <path d={svgPathsMulti.p16d5f480} fill="#D5D5D5" stroke="#D5D5D5" />
-        </svg>
-
-        <div className="relative z-10 flex flex-col">
-          {/* Enable slow replay */}
-          {enableSlowReplayGlobal && (
-            <button onClick={() => setEnableSlowReplay(!enableSlowReplay)} className="flex items-center gap-1 mb-4">
-              <div className="h-[16px] w-[32px]">
-                <svg className="block size-full" fill="none" viewBox="0 0 32 16">
-                  {enableSlowReplay ? (
-                    <><rect fill="#007AFF" height="16" rx="8" width="32" /><circle cx="24" cy="8" fill="white" r="6" /></>
-                  ) : (
-                    <><rect fill="#969696" height="16" rx="8" width="32" /><circle cx="8" cy="8" fill="white" r="6" /></>
-                  )}
-                </svg>
-              </div>
-              <span className="font-['Roboto',sans-serif] text-[14px] text-black">Enable slow replay</span>
-            </button>
-          )}
-
-          <div className="mb-4">
-            <input type="text" value={localSeqName} onChange={(e) => setLocalSeqName(e.target.value)} placeholder="Enter Label" className="w-full bg-white border border-neutral-300 h-[46px] rounded-[8px] px-3 font-['Raleway',sans-serif] text-[14px] text-black outline-none" />
-          </div>
-
-          <div className="space-y-4 mb-4">
-            {localLabels.map((label, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <input type="text" value={label.label} onChange={(e) => handleLabelChange(index, e.target.value)} placeholder="Enter Label" className="flex-1 bg-white border border-neutral-300 h-[46px] rounded-[8px] px-3 font-['Raleway',sans-serif] text-[14px] text-black outline-none" />
-                <button onClick={() => handleDeleteLabel(index)} className="w-6 h-6 flex items-center justify-center">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="black"><path d="M6 18L18 6M6 6l12 12" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </button>
-              </div>
-            ))}
-            <br />
-            <button onClick={handleAddAlias} className="w-full bg-black h-[47px] rounded-[8px] flex items-center justify-center gap-[10px] hover:opacity-90">
-              <svg className="w-[14px] h-[14px]" fill="none" preserveAspectRatio="none" viewBox="0 0 14 14"><path d={svgPathsNew.p11195800} fill="white" /></svg>
-              <span className="font-['Raleway',sans-serif] text-[20px] text-white">Add Alias</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Permissions */}
-      {permissionsConfig && (
-        <div className="mt-3 flex flex-col items-end gap-1">
-          <button onClick={() => setShowPermissions(!showPermissions)} className={`${showPermissions ? 'bg-black w-full' : 'bg-[#969696] w-[218px]'} h-[47px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white transition-all`}>
-            {showPermissions ? 'Hide Permissions' : 'Show Permissions'}
-          </button>
-          {showPermissions && (
-            <div className="w-full mt-2 space-y-2 bg-white/30 p-2 rounded">
-              {Object.entries(permissionsConfig).map(([key, value]) => (
-                <label key={key} className="flex items-center gap-2 cursor-pointer self-end">
-                  <input type="checkbox" checked={tmpPermissions[key] !== undefined} onChange={() => onPermissionsChange?.(key, value)} className="w-[22px] h-[22px]" />
-                  <span className="font-['Jost',sans-serif] text-[16px] text-black">{key}</span>
-                </label>
-              ))}
+          {config.enableSlowReplay && (
+            <div className="mb-5">
+              <input
+                type="text"
+                placeholder="Delay in seconds (optional)"
+                value={delaySeconds}
+                onChange={(e) => setDelaySeconds(e.target.value)}
+                className="w-full bg-white border border-[#c8c8c8] h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] px-3 font-['Raleway',sans-serif] text-[14px] text-black outline-none"
+              />
             </div>
           )}
-        </div>
-      )}
 
-      {/* Bottom Buttons */}
-      <div className="mt-4 flex gap-[10px]">
-        <button onClick={onCancel} className="flex-1 bg-[#969696] h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white">Cancel</button>
-        <button onClick={handleFinalAction} className="flex-1 bg-black h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white">save</button>
+          {renderActionButtons()}
+
+          <div className="mt-4">
+            <button
+              onClick={handleFinalAction}
+              className="w-full bg-black h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white hover:opacity-90 transition-opacity"
+            >
+              Finish Recording
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

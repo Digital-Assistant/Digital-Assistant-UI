@@ -408,41 +408,38 @@ export function RecordingDetail(props: RecordingDetailProps) {
     }
   };
 
-  const handleSaveEditedStep = (stepData: { title: string; delay?: number }) => {
-    // In the original code, `EditableStepForm` calls `validateStepEdit` -> `resetStatus` -> `autoPlay`.
-    // It also managed its own "Save" button which called `saveStep` -> `updateRecording` -> `storeRecording`.
+  const handleValidateStep = (stepData: { title: string; delay?: number }) => {
+    if (editingStepIndex !== null && selectedRecordingDetails?.id) {
+      DigitalAssistantCoreSDK.dispatch(startValidation(selectedRecordingDetails.id));
+      trigger("closePanel", { action: 'closePanel' });
+      handlePlayStatusChange("on");
+      autoPlay();
+    }
+  };
 
-    // Here `StepEditForm` calls `onSave` with new title/delay.
-    // We need to update the node data and save it.
-
+  const handleSaveEditedStep = async (stepData: { title: string; delay?: number }) => {
     if (editingStepIndex !== null && selectedRecordingDetails?.userclicknodesSet) {
       const updatedNodes = [...selectedRecordingDetails.userclicknodesSet];
-      const node = { ...updatedNodes[editingStepIndex] };
+      updatedNodes[editingStepIndex] = {
+        ...updatedNodes[editingStepIndex],
+        clickednodename: stepData.title,
+      };
 
-      // Update node properties based on stepData
-      // Note: Mapping title to actual node structure depends on node type.
-      // Assuming we update label or objData meta label
-      let objData = getObjData(node.objectdata);
-      if (!objData.meta) objData.meta = {};
-      objData.meta.label = stepData.title;
-      // How to save delay? `node.delay`? Original code might handle it differently.
-      // Assuming basic structure update for now.
+      if (showLoader) showLoader(true);
+      try {
+        await updateRecording({
+          id: selectedRecordingDetails.id,
+          userclicknodesSet: updatedNodes
+        });
+        if (refetchSearch) refetchSearch("on");
+        addNotification("Step Saved", "Step changes have been saved successfully.", "success");
+      } catch (e) {
+        addNotification("Error", "Failed to save step changes.", "error");
+      } finally {
+        if (showLoader) showLoader(false);
+      }
 
-      // node.objectdata might need to be re-stringified if we parsed it? 
-      // getObjData parses it, but doesn't return reference to internal object inside node if it's a string.
-
-      // For simplistic migration, let's assume we update what we can.
-      // Ideally we need looking at how `EditableStepForm` saved data.
-
-      // If generic update:
-      // updatedNodes[editingStepIndex] = node;
-      // storeRecording(updatedNodes, true); 
-
-      // For now, logging until we are sure about data structure update.
-      console.log("Saving step not fully implemented yet without structure details", stepData);
-
-      // To make it functional for UI:
-      setEditingStepIndex(null); // Exit edit mode
+      setEditingStepIndex(null);
       DigitalAssistantCoreSDK.dispatch(cancelStepEditing());
     }
   };
@@ -639,7 +636,10 @@ export function RecordingDetail(props: RecordingDetailProps) {
                   initialTitle={step.title}
                   initialDelay={step.delay}
                   onSave={handleSaveEditedStep}
+                  onValidate={handleValidateStep}
                   onCancel={handleCancelEdit}
+                  validationCompleted={!!editableStepFormState?.editingWorkflow?.validationCompleted}
+                  config={config}
                 />
               ) : (
                 <Step

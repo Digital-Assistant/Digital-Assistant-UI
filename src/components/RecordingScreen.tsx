@@ -22,12 +22,16 @@ import {
   UDAErrorLogger,
   UDAConsoleLogger,
   fetchDomain,
+  finalSaveSequence,
+  validateStepNameWithProfanity,
+  validateStepName,
 } from "@digital-assistant/core";
 import { on, off, trigger } from "../util/events";
 import { translate } from "../util/translation";
 import { addNotification } from "../util/addNotification";
 import { SavingProgress } from "./SavingProgress";
 import { StepEditor } from "./StepEditor";
+import { FinalSaveScreen } from "./FinalSaveScreen";
 
 type RecordPhase = "recording" | "naming" | "saving";
 
@@ -153,8 +157,7 @@ export function RecordingScreen({
 
   // ── Validation helpers ─────────────────────────────────────────────────────
   const validateInput = (value: string): boolean => {
-    if (!value || value.length > 100) return false;
-    return /^[0-9A-Za-z _.-]+$/.test(value);
+    return validateStepName(value).isValid;
   };
 
   const validateChange = async (value: string) => {
@@ -169,26 +172,27 @@ export function RecordingScreen({
   };
 
   // ── Profanity helpers (delegate to core SDK) ───────────────────────────────
-  const checkProfanity = async (keyword: string): Promise<string> => {
-    if (!config?.enableProfanity) return keyword.trim();
+  const checkProfanityImproved = async (keyword: string): Promise<{ cleaned: string; hasProfanity: boolean }> => {
+    if (!config?.enableProfanity) return { cleaned: keyword.trim(), hasProfanity: false };
     setCheckingProfanity(true);
     try {
-      const response: any = await profanityCheck(keyword);
-      if (response?.Terms?.length > 0) {
-        response.Terms.forEach((term: any) => {
-          keyword = keyword.replaceAll(term.Term, "");
-        });
+      const result = await validateStepNameWithProfanity(keyword, true);
+      if (result.success) {
+        return {
+          cleaned: result.data?.cleanedValue || keyword.trim(),
+          hasProfanity: !!result.data?.hasProfanity
+        };
       }
+      return { cleaned: keyword.trim(), hasProfanity: false };
     } finally {
       setCheckingProfanity(false);
     }
-    return keyword.trim();
   };
 
   const checkMainLabelProfanity = async (value: string) => {
     if (!value.trim()) return;
-    const cleaned = await checkProfanity(value);
-    if (value.trim() !== cleaned) {
+    const { cleaned, hasProfanity } = await checkProfanityImproved(value);
+    if (hasProfanity) {
       setInputAlert((a: any) => ({ ...a, mainLabelProfanity: true }));
     } else {
       setInputAlert((a: any) => ({ ...a, mainLabelProfanity: false }));
@@ -212,11 +216,11 @@ export function RecordingScreen({
 
   const checkLabelProfanity = async (index: number, value: string) => {
     if (!value.trim()) return;
-    const cleaned = await checkProfanity(value);
+    const { cleaned, hasProfanity } = await checkProfanityImproved(value);
     const updatedLabels = [...labels];
     updatedLabels[index] = {
       label: cleaned,
-      profanity: value.trim() !== cleaned,
+      profanity: hasProfanity,
     };
     setLabels(updatedLabels);
     setInputAt("");
@@ -267,24 +271,26 @@ export function RecordingScreen({
       return;
     }
 
-    if (!finalName || finalName.trim() === "") {
-      setInputAlert((a: any) => ({ ...a, name: true }));
-      UDAConsoleLogger.info("Submission blocked: Name is empty", 1);
-      addNotification("Validation Error", "Sequence name is mandatory.", "error");
+    const result = await validateStepNameWithProfanity(finalName, config?.enableProfanity);
+    if (!result.success) {
+      setInputError((e: any) => ({ ...e, name: true }));
+      UDAConsoleLogger.info("Submission blocked: Name validation failed - " + result.error, 1);
+      addNotification("Validation Error", result.error || "Sequence name is invalid.", "error");
       return;
     }
-    if (!validateInput(finalName)) {
-      setInputError((e: any) => ({ ...e, name: true }));
-      UDAConsoleLogger.info("Submission blocked: Name validation failed", 1);
-      addNotification("Validation Error", "Sequence name contains invalid characters.", "error");
-      return;
+
+    let processedName = finalName;
+    if (result.data?.hasProfanity) {
+      processedName = result.data.cleanedValue;
+      setName(processedName);
+      addNotification("Profanity Detected", "Profanity has been removed from sequence name.", "warning");
     }
 
     setDisableForm(true);
     setPhase("saving");
 
     // Build label array: [mainName, ...aliases]
-    const labelValues: string[] = [finalName, ...finalLabels];
+    const labelValues: string[] = [processedName, ...finalLabels];
 
     const _payload: any = {
       name: JSON.stringify(labelValues),
@@ -318,49 +324,14 @@ export function RecordingScreen({
       };
     }
 
-    // ── Per-click save loop (SDK: recordClicks) ──────────────────────────────
-    const totalClicks = recordData.length + 1;
-    let savedClicks = 0;
-    let failed = false;
-
+    // ── Per-click save loop and Final save (SDK: finalSaveSequence) ──────────
     try {
-      for (const [index, clickData] of Object.entries(recordData) as [string, any][]) {
-        if (clickData?.id) {
-          // Already saved in a previous attempt
-          savedClicks++;
-          setSavedClickedDataPercent(Math.ceil((savedClicks / totalClicks) * 100));
-          continue;
-        }
-        const resp = await recordClicks(clickData);   // ← core SDK
-        if (resp?.id) {
-          recordData[parseInt(index)] = resp;
-          savedClicks++;
-          setSavedClickedDataPercent(Math.ceil((savedClicks / totalClicks) * 100));
-        } else {
-          UDAErrorLogger.error("Failed to record click: " + JSON.stringify(clickData));
-          setSavingError(true);
-          failed = true;
-          break; // Stop immediately on failure
-        }
-      }
-    } catch (e: any) {
-      UDAErrorLogger.error("Exception during recordClicks: " + e?.message);
-      setSavingError(true);
-      failed = true;
-    }
+      const { response: instance } = await finalSaveSequence(
+        _payload,
+        recordData,
+        (percent) => setSavedClickedDataPercent(percent)
+      );
 
-    storeRecording(recordData);
-
-    if (failed) {
-      addNotification("Partial Failure", "Some steps failed to save. Please review and try again.", "error");
-      setDisableForm(false);
-      setPhase("naming");
-      return;
-    }
-
-    // ── Final sequence save (SDK: postRecordSequenceData) ───────────────────
-    try {
-      const instance = await postRecordSequenceData(_payload);   // ← core SDK
       if (instance) {
         setSavedClickedDataPercent(100);
         addNotification(translate("savedSequence"), translate("savedSequenceDescription"), "success");
@@ -379,12 +350,13 @@ export function RecordingScreen({
       } else {
         throw new Error("Failed to save sequence");
       }
-    } catch (error) {
-      UDAConsoleLogger.info("Save Sequence Error:", error);
+    } catch (error: any) {
+      UDAErrorLogger.error("Save Sequence Error: " + error?.message);
       addNotification(translate("savedSequenceError"), translate("savedSequenceErrorDescription"), "error");
       setDisableForm(false);
       setPhase("naming");
       setFormSubmit(false);
+      setSavingError(true);
     }
   };
 
@@ -451,204 +423,37 @@ export function RecordingScreen({
   // ══════════════════════════════════════════════════════════════════════════
   if (phase === "naming") {
     return (
-      <div className="content-stretch flex flex-col gap-[16px] items-start w-full">
-        {/* Header */}
-        <div className="content-stretch flex gap-[10px] items-center relative shrink-0 w-full">
-          <div className="relative shrink-0 size-[16px]">
-            <svg className="block size-full" fill="none" viewBox="0 0 16 16">
-              <circle cx="8" cy="8" fill="#FB2C36" r="8" />
-            </svg>
-          </div>
-          <p className="font-['Raleway',sans-serif] font-semibold text-[16px] text-[#1c1c1e] leading-[normal] whitespace-pre">
-            Save Recording
-          </p>
-        </div>
-
-        {/* Error alerts */}
-        {savingError && (
-          <div className="w-full bg-red-50 border border-red-300 text-red-700 rounded-[8px] px-4 py-3 text-sm">
-            Some steps failed to save previously. Please retry.
-          </div>
-        )}
-        {screenInfoNotAvailable && (
-          <div className="w-full bg-yellow-50 border border-yellow-300 text-yellow-700 rounded-[8px] px-4 py-3 text-sm">
-            {translate("screenInfoError")}
-          </div>
-        )}
-
-        {/* Recorded steps (read-only list) */}
-        <ul className="w-full flex flex-col gap-2">
-          {recordData.map((item, index) => (
-            <li
-              key={`step-${index}`}
-              className="bg-white content-stretch flex gap-[10px] h-[44px] items-center px-[10px] rounded-[8px] border border-[#e0e0e0]"
-            >
-              <span className="font-['Raleway',sans-serif] text-[14px] text-[#1c1c1e]">
-                {index + 1}. {getStepLabel(item)}
-              </span>
-            </li>
-          ))}
-        </ul>
-
-        {/* Slow replay */}
-        {config?.enableSlowReplay && (
-          <div className="w-full flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="font-['Jost',sans-serif] text-[14px] text-black">
-                {translate("enableDelayTimeText")}
-              </span>
-              <button
-                onClick={() => setSlowPlayback(!slowPlayback)}
-                className="h-[16px] w-[32px] flex-shrink-0"
-                aria-label="Toggle slow playback"
-              >
-                <svg className="block size-full" fill="none" viewBox="0 0 32 16">
-                  {slowPlayback ? (
-                    <>
-                      <rect fill="#007AFF" height="16" rx="8" width="32" />
-                      <circle cx="24" cy="8" fill="white" r="6" />
-                    </>
-                  ) : (
-                    <>
-                      <rect fill="#969696" height="16" rx="8" width="32" />
-                      <circle cx="8" cy="8" fill="white" r="6" />
-                    </>
-                  )}
-                </svg>
-              </button>
-            </div>
-            {slowPlayback && (
-              <input
-                type="number"
-                className="w-full bg-white border border-[#c8c8c8] h-[46px] rounded-[8px] px-3 font-['Raleway',sans-serif] text-[14px] text-black outline-none"
-                placeholder={translate("delayTimePlaceHolder")}
-                value={delayPlaybackTime}
-                onChange={(e) => validateDelayTime(Number(e.target.value))}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Main label input */}
-        <div className="w-full flex flex-col gap-1">
-          <input
-            type="text"
-            id="uda-recorded-name"
-            className={`w-full bg-white border ${inputError.name ? "border-red-500" : "border-[#c8c8c8]"
-              } h-[46px] rounded-[8px] px-3 font-['Raleway',sans-serif] text-[14px] text-black outline-none`}
-            placeholder="Enter Label"
-            value={name}
-            onChange={async (e) => {
-              await validateChange(e.target.value);
-              setInputAt("mainLabel");
-            }}
-            onBlur={async (e) => {
-              await checkMainLabelProfanity(e.target.value);
-            }}
-          />
-          {inputAlert.mainLabelProfanity && (
-            <span className="text-orange-500 text-[12px]">{translate("profanityDetected")}</span>
-          )}
-          {inputAlert.name && (
-            <span className="text-red-500 text-[12px]">{translate("inputMandatory")}</span>
-          )}
-          {inputError.name && (
-            <span className="text-red-500 text-[12px]">{translate("inputError")}</span>
-          )}
-        </div>
-
-        {/* Alias labels */}
-        <div className="w-full flex flex-col gap-2">
-          {labels.map((item, index) => (
-            <div key={`label-${index}`} className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  className={`flex-1 bg-white border ${inputError[`label${index}`]?.error ? "border-red-500" : "border-[#c8c8c8]"
-                    } h-[46px] rounded-[8px] px-3 font-['Raleway',sans-serif] text-[14px] text-black outline-none`}
-                  placeholder="Enter Alias Label"
-                  value={item.label}
-                  onChange={async (e) => {
-                    await onExtraLabelChange(index, e.target.value);
-                    setInputAt(`label${index}`);
-                  }}
-                  onBlur={async (e) => {
-                    await checkLabelProfanity(index, e.target.value);
-                  }}
-                />
-                <button
-                  onClick={() => removeLabel(index)}
-                  className="w-8 h-8 flex items-center justify-center hover:opacity-70 transition-opacity"
-                  aria-label="Remove label"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24">
-                    <path d="M6 18L18 6M6 6l12 12" stroke="black" strokeLinecap="round" strokeWidth="2" />
-                  </svg>
-                </button>
-              </div>
-              {item.profanity && (
-                <span className="text-orange-500 text-[12px]">{translate("profanityDetected")}</span>
-              )}
-              {inputError[`label${index}`]?.error && (
-                <span className="text-red-500 text-[12px]">{translate("inputError")}</span>
-              )}
-            </div>
-          ))}
-          <button
-            onClick={addLabel}
-            className="self-start font-['Raleway',sans-serif] text-[14px] text-black underline hover:opacity-70 transition-opacity"
-          >
-            + {translate("addLabel")}
-          </button>
-        </div>
-
-        {/* Permissions */}
-        {config?.enablePermissions && config?.permissions && (
-          <div className="w-full flex flex-col gap-2">
-            <button
-              onClick={() => setAdvBtnShow(!advBtnShow)}
-              className={`${advBtnShow ? "bg-black w-full" : "bg-[#969696] w-[218px]"} h-[40px] rounded-[8px] font-['Raleway',sans-serif] text-[14px] text-white hover:opacity-90 transition-all`}
-            >
-              {advBtnShow ? translate("hidePermissions") : translate("showPermissions")}
-            </button>
-            {advBtnShow && (
-              <div className="flex flex-col gap-2 pl-2">
-                {Object.entries(config.permissions).map(([key, value]) => (
-                  <label key={key} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4"
-                      checked={tmpPermissionsObj[key] !== undefined}
-                      onChange={() => handlePermissions(key, value)}
-                    />
-                    <span className="font-['Jost',sans-serif] text-[14px] text-black">
-                      {key}: {String(value)}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Action buttons */}
-        <div className="w-full flex gap-[10px] mt-2">
-          <button
-            onClick={cancelRecording}
-            disabled={disableForm}
-            className="flex-1 bg-[#969696] h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {translate("cancelRecording")}
-          </button>
-          <button
-            onClick={() => submitRecording()}
-            disabled={disableForm || screenInfoNotAvailable}
-            className="flex-1 bg-black h-[50px] rounded-[8px] font-['Raleway',sans-serif] text-[20px] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {translate("submitButton")}
-          </button>
-        </div>
-      </div>
+      <FinalSaveScreen
+        name={name}
+        setName={setName}
+        labels={labels}
+        setLabels={setLabels}
+        inputError={inputError}
+        inputAlert={inputAlert}
+        setInputAt={setInputAt}
+        validateChange={validateChange}
+        checkMainLabelProfanity={checkMainLabelProfanity}
+        onExtraLabelChange={onExtraLabelChange}
+        checkLabelProfanity={checkLabelProfanity}
+        addLabel={addLabel}
+        removeLabel={removeLabel}
+        config={config}
+        advBtnShow={advBtnShow}
+        setAdvBtnShow={setAdvBtnShow}
+        tmpPermissionsObj={tmpPermissionsObj}
+        handlePermissions={handlePermissions}
+        slowPlayback={slowPlayback}
+        setSlowPlayback={setSlowPlayback}
+        delayPlaybackTime={delayPlaybackTime}
+        validateDelayTime={validateDelayTime}
+        onCancel={cancelRecording}
+        onSubmit={() => submitRecording()}
+        disableForm={disableForm}
+        screenInfoNotAvailable={screenInfoNotAvailable}
+        recordData={recordData}
+        getStepLabel={getStepLabel}
+        savingError={savingError}
+      />
     );
   }
 
@@ -710,17 +515,15 @@ export function RecordingScreen({
             permissionsConfig={config?.permissions}
             tmpPermissions={tmpPermissionsObj}
             onPermissionsChange={handlePermissions}
-            enableSlowReplayGlobal={config?.enableSlowReplay}
+            config={config}
             onFinalSave={(data) => {
-              UDAConsoleLogger.info("Submitting unified recording: " + JSON.stringify(data));
-              submitRecording(data);
+              setPhase("naming");
             }}
             onCancel={cancelRecording}
           />
         </div>
       )}
-
-
+      <br />
     </div>
   );
 }
