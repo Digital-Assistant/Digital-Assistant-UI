@@ -4,6 +4,8 @@ import { cn } from "../lib/cn";
 export interface StepData {
   title: string;
   delay?: number;
+  type?: string;
+  tooltip?: string;
   completed: boolean;
   failed?: boolean;
 }

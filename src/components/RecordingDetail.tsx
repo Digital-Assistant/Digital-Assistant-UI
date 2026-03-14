@@ -2,7 +2,7 @@ import { TitleBar } from "./TitleBar";
 import { PlayerControls } from "./PlayerControls";
 import { FeedbackButtons } from "./FeedbackButtons";
 import { StepsList, StepData } from "./StepsList";
-import { StepEditForm } from "./StepEditForm";
+import { StepForm } from "./StepForm";
 import { LabelEditor } from "./LabelEditor";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { Step } from "./Step";
@@ -14,15 +14,21 @@ import {
   cancelStepEditing,
   startValidation,
   markValidationCompleted,
+  addNotificationAction,
   StorageUtil,
   recordUserClickData,
   matchNode,
   getCurrentPlayItem,
-  updateRecording,
+  updateRecording as updateRecordingService,
+  updateRecordClicks,
+  updateSequnceIndex as updateSequenceIndexService,
   getObjData,
   getVoteRecord,
   fetchStatuses,
   getClickedNodeLabel,
+  isHighlightNode,
+  saveStepChanges,
+  validateStepNameWithProfanity,
   CONFIG
 } from "@digital-assistant/core";
 import { getUserId } from "../services/userService";
@@ -98,10 +104,10 @@ export function RecordingDetail(props: RecordingDetailProps) {
   }, []);
 
   useEffect(() => {
-    if (data) {
+    if (data && data.id !== selectedRecordingDetails?.id) {
       setSelectedRecordingDetails(data);
     }
-  }, [data]);
+  }, [data, selectedRecordingDetails?.id]);
 
   // SDK Subscription
   useEffect(() => {
@@ -123,51 +129,54 @@ export function RecordingDetail(props: RecordingDetailProps) {
     }
   }, [editingWorkflow?.isEditing, editableStepFormState?.currentEditingIndex]);
 
-  // Initialize autoPlay if storage says so (handling missing isPlaying prop)
+  // Sync selectedRecordingDetails from SDK Redux store (Source of Truth during Playback)
   useEffect(() => {
-    if (isPlaying === "on") {
-      autoPlay();
-    } else if (isPlaying === undefined) {
-      const storedStatus = StorageUtil.getFromStore(CONFIG.RECORDING_IS_PLAYING, true);
-      if (storedStatus === "on") {
-        autoPlay();
-      }
+    if (sdkState.recording && sdkState.recording.selectedRecordingDetails) {
+      console.log("RecordingDetail: Syncing selectedRecordingDetails from SDK store",
+        sdkState.recording.selectedRecordingDetails.userclicknodesSet.map((n: any) => n.status));
+      setSelectedRecordingDetails(sdkState.recording.selectedRecordingDetails);
     }
-  }, [isPlaying]);
+  }, [sdkState.recording?.selectedRecordingDetails]);
+
+  // No longer needed: initialization is handled by PlaybackService in SDK
 
   useEffect(() => {
-    const handleAutoPlayEvent = (e: any) => autoPlay(e.detail);
     const handleBackNavEvent = () => backNav();
-    const handlePauseEvent = () => pause();
+    const handlePauseEvent = () => setPlayStatus('paused');
+    const handlePlayStartedEvent = () => setPlayStatus('playing');
+    const handlePlayCompletedEvent = () => setPlayStatus('completed');
 
-    on("UDAPlayNext", handleAutoPlayEvent);
-    on("ContinuePlay", handleAutoPlayEvent);
     on("BackToSearchResults", handleBackNavEvent);
     on("PausePlay", handlePauseEvent);
+    on("ContinuePlay", handlePlayStartedEvent);
+    on("UDAPlaybackCompleted", handlePlayCompletedEvent);
 
     return () => {
-      off("UDAPlayNext", handleAutoPlayEvent);
-      off("ContinuePlay", handleAutoPlayEvent);
       off("BackToSearchResults", handleBackNavEvent);
       off("PausePlay", handlePauseEvent);
+      off("ContinuePlay", handlePlayStartedEvent);
+      off("UDAPlaybackCompleted", handlePlayCompletedEvent);
     };
   }, []);
 
   // Update steps when data changes
   useEffect(() => {
-    if (selectedRecordingDetails?.userclicknodesSet) {
-      const newSteps = selectedRecordingDetails.userclicknodesSet.map((node: any) => {
-        const objData = getObjData(node.objectdata);
-        return {
-          title: getClickedNodeLabel(node) || objData?.meta?.label || node.label || "Step",
-          // delay: node.delay, // Assuming delay needs to be extracted
-          completed: node.status === "completed",
-          failed: false, // Logic for failed?
-          // Add other mapped props
-        };
-      });
-      setSteps(newSteps);
-    }
+    console.log("RecordingDetail: Updating steps based on selectedRecordingDetails",
+      selectedRecordingDetails.userclicknodesSet.map((n: any) => n.status));
+    const newSteps = selectedRecordingDetails.userclicknodesSet.map((node: any) => {
+      const objData = getObjData(node.objectdata);
+      const meta = objData?.meta ?? {};
+      return {
+        title: getClickedNodeLabel(node) || meta.label || node.label || "Step",
+        delay: meta.slowPlaybackTime,
+        type: isHighlightNode(objData) ? "Highlight" : "Link",
+        tooltip: meta.tooltipInfo,
+        completed: node.status === "completed",
+        failed: false,
+      };
+    });
+    setSteps(newSteps);
+    checkStatus();
   }, [selectedRecordingDetails]);
 
   // -- LOGIC HELPER FUNCTIONS --
@@ -187,24 +196,44 @@ export function RecordingDetail(props: RecordingDetailProps) {
   };
 
   const updateStatus = async (index: number) => {
-    selectedRecordingDetails.userclicknodesSet[index].status = "completed";
-    StorageUtil.setToStore(selectedRecordingDetails, CONFIG.SELECTED_RECORDING, false);
-    setSelectedRecordingDetails({ ...selectedRecordingDetails });
+    const updatedNodes = selectedRecordingDetails.userclicknodesSet.map((node: any, i: number) => {
+      if (i === index) {
+        return { ...node, status: "completed" };
+      }
+      return node;
+    });
+
+    const updatedDetails = {
+      ...selectedRecordingDetails,
+      userclicknodesSet: updatedNodes
+    };
+
+    StorageUtil.setToStore(updatedDetails, CONFIG.SELECTED_RECORDING, false);
+    setSelectedRecordingDetails(updatedDetails);
   };
 
   const resetStatus = () => {
-    const updatedRecordingDetails = { ...selectedRecordingDetails };
-    if (updatedRecordingDetails?.userclicknodesSet) {
-      for (let i = 0; i < updatedRecordingDetails.userclicknodesSet.length; i++) {
-        if (updatedRecordingDetails.userclicknodesSet[i]?.status) {
-          delete updatedRecordingDetails.userclicknodesSet[i].status;
-        }
+    if (!selectedRecordingDetails?.userclicknodesSet) return true;
+
+    const updatedNodes = selectedRecordingDetails.userclicknodesSet.map((node: any) => {
+      if (node.status) {
+        // Use destructuring to create a new object without 'status'
+        // This is safer than 'delete' when working with potentially frozen objects
+        const { status, ...nodeWithoutStatus } = node;
+        return nodeWithoutStatus;
       }
-    }
+      return node;
+    });
+
+    const updatedRecordingDetails = {
+      ...selectedRecordingDetails,
+      userclicknodesSet: updatedNodes
+    };
+
     StorageUtil.setToStore(updatedRecordingDetails, CONFIG.SELECTED_RECORDING, false);
     setSelectedRecordingDetails(updatedRecordingDetails);
+
     if (playStatus !== 'playing') {
-      // Only reset vote if not just replaying? Original code resets vote on resetStatus
       setUserVote({ upvote: 0, downvote: 0 });
     }
     return true;
@@ -281,70 +310,10 @@ export function RecordingDetail(props: RecordingDetailProps) {
     }
   };
 
-  const autoPlay = async (data = null) => {
-    if (StorageUtil.getFromStore(CONFIG.RECORDING_IS_PLAYING, true) !== "on") {
-      return;
-    }
-    setPlayStatus('playing');
-
-    const currentSdkState = DigitalAssistantCoreSDK.getState();
-    const editingWorkflow = currentSdkState.editableStepForm?.editingWorkflow;
-
-    let playItem: any = getCurrentPlayItem();
-
-    // Draft changes logic
-    if (editingWorkflow?.isEditing && editingWorkflow?.draftChanges) {
-      const currentIndex = currentSdkState.editableStepForm.currentEditingIndex;
-      if (playItem.index === currentIndex) {
-        playItem = {
-          ...playItem,
-          node: {
-            ...playItem.node,
-            ...editingWorkflow.draftChanges
-          }
-        };
-      }
-    }
-
-    if (playItem.node) {
-      if (await matchNode(playItem)) {
-        updateStatus(playItem.index);
-      } else {
-        recordUserClickData('playBackError', '', selectedRecordingDetails.id);
-        pause();
-        removeToolTip();
-        trigger("openPanel", { action: 'openPanel' });
-      }
-    } else {
-      // Completed
-      recordUserClickData('playCompleted', '', selectedRecordingDetails.id);
-      pause();
-      removeToolTip();
-      addNotification(translate('autoplayCompletedTitle'), translate('autoplayCompleted'), 'success');
-      setPlayStatus('completed');
-      handlePlayStatusChange("off");
-
-      const currentSdkState = DigitalAssistantCoreSDK.getState();
-      const currentWorkflow = currentSdkState.editableStepForm?.editingWorkflow;
-
-      if (currentWorkflow?.isEditing && currentWorkflow?.validationRequired) {
-        DigitalAssistantCoreSDK.dispatch(markValidationCompleted());
-        trigger("openPanel", { action: 'openPanel' });
-      } else if (currentWorkflow?.isEditing) {
-        trigger("openPanel", { action: 'openPanel' });
-      } else {
-        if (!config?.enableHidePanelAfterCompletion) {
-          trigger("openPanel", { action: 'openPanel' });
-        } else {
-          backNav(true, false);
-        }
-      }
-    }
-  };
-
   const pause = async () => {
     handlePlayStatusChange("off");
     setPlayStatus('paused');
+    trigger("PausePlay", { recordingId: selectedRecordingDetails.id });
   };
 
   const replay = async () => {
@@ -353,7 +322,8 @@ export function RecordingDetail(props: RecordingDetailProps) {
     if (resetStatus()) {
       trigger("closePanel", { action: 'closePanel' });
       handlePlayStatusChange("on");
-      autoPlay();
+      // Trigger SDK orchestration
+      trigger("ContinuePlay", { action: 'ContinuePlay' });
     }
   };
 
@@ -384,8 +354,10 @@ export function RecordingDetail(props: RecordingDetailProps) {
   // -- EDITING STEPS --
 
   const storeRecording = async (data: any, enableValidation: boolean = true) => {
-    const updatedRecordingDetails = { ...selectedRecordingDetails };
-    updatedRecordingDetails.userclicknodesSet = data;
+    const updatedRecordingDetails = {
+      ...selectedRecordingDetails,
+      userclicknodesSet: data
+    };
     setSelectedRecordingDetails(updatedRecordingDetails);
     StorageUtil.setToStore(updatedRecordingDetails, CONFIG.SELECTED_RECORDING, false);
     if (enableValidation) {
@@ -403,37 +375,95 @@ export function RecordingDetail(props: RecordingDetailProps) {
       DigitalAssistantCoreSDK.dispatch(startStepEditing({
         recordingId: selectedRecordingDetails.id,
         index: index,
-        stepData: item
+        stepData: JSON.parse(JSON.stringify(item)) // Deep copy for robust backup
       }));
     }
   };
 
-  const handleValidateStep = (stepData: { title: string; delay?: number }) => {
+  const handleValidateStep = (_stepData: any) => {
     if (editingStepIndex !== null && selectedRecordingDetails?.id) {
+      resetStatus(); // Clear all step statuses before starting validation playback
       DigitalAssistantCoreSDK.dispatch(startValidation(selectedRecordingDetails.id));
       trigger("closePanel", { action: 'closePanel' });
       handlePlayStatusChange("on");
-      autoPlay();
+      // Trigger SDK orchestration
+      trigger("ContinuePlay", { action: 'ContinuePlay' });
     }
   };
 
-  const handleSaveEditedStep = async (stepData: { title: string; delay?: number }) => {
+  const handleSaveEditedStep = async (stepData: {
+    title: string;
+    delay?: number;
+    type?: string;
+    tooltip?: string;
+    skipDuringPlay?: boolean;
+    personalInformation?: boolean;
+  }) => {
     if (editingStepIndex !== null && selectedRecordingDetails?.userclicknodesSet) {
-      const updatedNodes = [...selectedRecordingDetails.userclicknodesSet];
-      updatedNodes[editingStepIndex] = {
-        ...updatedNodes[editingStepIndex],
-        clickednodename: stepData.title,
-      };
-
       if (showLoader) showLoader(true);
       try {
-        await updateRecording({
-          id: selectedRecordingDetails.id,
-          userclicknodesSet: updatedNodes
+        const profResult = await validateStepNameWithProfanity(stepData.title, config?.enableProfanity);
+        let finalTitle = stepData.title;
+        if (profResult.success && profResult.data?.hasProfanity) {
+          finalTitle = profResult.data.cleanedValue;
+          addNotification("Profanity Detected", "Profanity has been removed from your step name.", "warning");
+        }
+
+        const result = await saveStepChanges({
+          recordData: selectedRecordingDetails.userclicknodesSet,
+          index: editingStepIndex,
+          stepEditValue: finalTitle,
+          isUpdateMode: true, // This is an update to an existing recording
+          tooltipInfo: stepData.tooltip,
+          slowPlaybackTime: stepData.delay,
+          skipDuringPlay: stepData.skipDuringPlay,
+          isPersonal: stepData.personalInformation,
         });
-        if (refetchSearch) refetchSearch("on");
-        addNotification("Step Saved", "Step changes have been saved successfully.", "success");
+
+        if (result.success && result.data) {
+          const updatedRecording = {
+            ...selectedRecordingDetails,
+            userclicknodesSet: result.data
+          };
+
+          // Synchronize with backend using legacy API sequence
+          const editingStep = result.data[editingStepIndex];
+          if (editingStep) {
+            // Send only essential fields to avoid API failures with large payloads.
+            // Ensure both sessionid and usersessionid are passed for API compatibility.
+            const modifiedData = {
+              id: editingStep.id,
+              clickednodename: editingStep.clickednodename,
+              objectdata: editingStep.objectdata,
+              domain: editingStep.domain,
+              urlpath: editingStep.urlpath,
+              html5: editingStep.html5,
+              clickedpath: editingStep.clickedpath,
+              sessionid: userId || selectedRecordingDetails.usersessionid,
+              usersessionid: userId || selectedRecordingDetails.usersessionid,
+            };
+            await updateRecordClicks(modifiedData);
+            await updateSequenceIndexService(selectedRecordingDetails.id);
+          }
+
+          // Send full update to API to ensure backend compatibility
+          await updateRecordingService(updatedRecording);
+
+          setSelectedRecordingDetails(updatedRecording);
+          StorageUtil.setToStore(updatedRecording, CONFIG.SELECTED_RECORDING, false);
+
+          // Record this action for analytics
+          recordUserClickData('editStep', '', selectedRecordingDetails.id);
+
+          if (refetchSearch) refetchSearch("on");
+          DigitalAssistantCoreSDK.dispatch(addNotificationAction({
+            title: "Step Saved",
+            description: "Step changes have been saved successfully.",
+            status: "success"
+          }));
+        }
       } catch (e) {
+        console.error('Error saving step:', e);
         addNotification("Error", "Failed to save step changes.", "error");
       } finally {
         if (showLoader) showLoader(false);
@@ -453,6 +483,27 @@ export function RecordingDetail(props: RecordingDetailProps) {
     }
     setEditingStepIndex(null);
     DigitalAssistantCoreSDK.dispatch(cancelStepEditing());
+  };
+
+  const handlePlayNode = async (index: number) => {
+    if (playStatus === 'playing') return;
+
+    const node = selectedRecordingDetails.userclicknodesSet[index];
+    if (!node) return;
+
+    const playItem = {
+      index,
+      node: node,
+      selectedRecordingDetails: selectedRecordingDetails
+    };
+
+    trigger("closePanel", { action: 'closePanel' });
+    if (await matchNode(playItem)) {
+      updateStatus(index);
+    } else {
+      recordUserClickData('playBackError', '', selectedRecordingDetails.id);
+      trigger("openPanel", { action: 'openPanel' });
+    }
   };
 
   const handleReport = (issueType: string, description: string) => {
@@ -500,13 +551,28 @@ export function RecordingDetail(props: RecordingDetailProps) {
   };
 
   const saveLabels = async (newLabels: string[]) => {
-    const updatedData = { ...selectedRecordingDetails, name: JSON.stringify(newLabels.map(l => ({ label: l, profanity: false }))) }; // Simplified profanity for now
-
     if (showLoader) showLoader(true);
     try {
-      await updateRecording(updatedData);
-      setSelectedRecordingDetails(updatedData);
-      StorageUtil.setToStore(updatedData, CONFIG.SELECTED_RECORDING, false);
+      // Check each label for profanity if enabled
+      const processedLabels = await Promise.all(newLabels.map(async (label) => {
+        const result = await validateStepNameWithProfanity(label, config?.enableProfanity);
+        if (result.success && result.data?.hasProfanity) {
+          addNotification("Profanity Detected", `Profanity removed from label: ${label}`, "warning");
+          return { label: result.data.cleanedValue, profanity: true };
+        }
+        return { label, profanity: false };
+      }));
+
+      const updatedDetails = {
+        ...selectedRecordingDetails,
+        name: JSON.stringify(processedLabels)
+      };
+
+      await updateRecordingService(updatedDetails);
+
+      // Update local state and storage
+      setSelectedRecordingDetails(updatedDetails);
+      StorageUtil.setToStore(updatedDetails, CONFIG.SELECTED_RECORDING, false);
       setIsEditingLabels(false);
       if (refetchSearch) refetchSearch("on");
       addNotification(translate('labelsUpdated'), translate('labelsUpdatedDescription'), 'success');
@@ -520,13 +586,27 @@ export function RecordingDetail(props: RecordingDetailProps) {
   const toggleAdvanced = async () => {
     if (advBtnShow) {
       if (showLoader) showLoader(true);
-      await updateRecording({ id: selectedRecordingDetails.id, additionalParams: tmpPermissionsObj });
-      selectedRecordingDetails.additionalParams = tmpPermissionsObj;
-      StorageUtil.setToStore(selectedRecordingDetails, CONFIG.SELECTED_RECORDING, false);
-      setAdvBtnShow(!advBtnShow);
-      if (showLoader) showLoader(false);
+      try {
+        const updatedDetails = {
+          ...selectedRecordingDetails,
+          additionalParams: tmpPermissionsObj
+        };
+
+        await updateRecordingService(updatedDetails);
+
+        // Update local state and storage
+        setSelectedRecordingDetails(updatedDetails);
+        StorageUtil.setToStore(updatedDetails, CONFIG.SELECTED_RECORDING, false);
+
+        setAdvBtnShow(false);
+      } catch (e) {
+        console.error("Error updating permissions:", e);
+        addNotification("Error", "Failed to update permissions.", "error");
+      } finally {
+        if (showLoader) showLoader(false);
+      }
     } else {
-      setAdvBtnShow(!advBtnShow);
+      setAdvBtnShow(true);
     }
   };
 
@@ -542,14 +622,27 @@ export function RecordingDetail(props: RecordingDetailProps) {
 
   const updateStatusChange = async (newStatus: number) => {
     if (showLoader) showLoader(true);
-    let permissions = { ...tmpPermissionsObj };
-    permissions.status = newStatus;
-    setTmpPermissionsObj({ ...permissions });
+    try {
+      let permissions = { ...tmpPermissionsObj };
+      permissions.status = newStatus;
+      setTmpPermissionsObj({ ...permissions });
 
-    await updateRecording({ id: selectedRecordingDetails.id, additionalParams: permissions });
-    selectedRecordingDetails.additionalParams = permissions;
-    StorageUtil.setToStore(selectedRecordingDetails, CONFIG.SELECTED_RECORDING, false);
-    if (showLoader) showLoader(false);
+      const updatedDetails = {
+        ...selectedRecordingDetails,
+        additionalParams: permissions
+      };
+
+      await updateRecordingService(updatedDetails);
+
+      // Update local state and storage
+      setSelectedRecordingDetails(updatedDetails);
+      StorageUtil.setToStore(updatedDetails, CONFIG.SELECTED_RECORDING, false);
+    } catch (e) {
+      console.error("Error updating status:", e);
+      addNotification("Error", "Failed to update status.", "error");
+    } finally {
+      if (showLoader) showLoader(false);
+    }
   };
 
   // Initialize permissions and status options
@@ -579,7 +672,19 @@ export function RecordingDetail(props: RecordingDetailProps) {
           />
           {(config?.enableEditingOfRecordings && selectedRecordingDetails?.usersessionid === userId) && (
             <button
-              className="absolute top-2 right-12 px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded text-sm text-gray-700 font-medium"
+              style={{
+                position: 'absolute',
+                top: '8px',
+                right: '48px',
+                padding: '4px 12px',
+                backgroundColor: '#f3f4f6', // gray-100
+                borderRadius: '4px',
+                fontSize: '14px',
+                color: '#374151', // gray-700
+                fontWeight: 500,
+                border: '1px solid #e5e7eb',
+                cursor: 'pointer'
+              }}
               onClick={startEditing}
             >
               {editRecording ? "Done" : "Edit"}
@@ -601,7 +706,8 @@ export function RecordingDetail(props: RecordingDetailProps) {
           onPlay={() => {
             trigger("closePanel", { action: 'closePanel' });
             handlePlayStatusChange("on");
-            autoPlay();
+            // Trigger SDK orchestration
+            trigger("ContinuePlay", { action: 'ContinuePlay' });
           }}
           onPause={pause}
           onReplay={replay}
@@ -631,14 +737,21 @@ export function RecordingDetail(props: RecordingDetailProps) {
           {steps.map((step, index) => (
             <div key={index}>
               {editingStepIndex === index ? (
-                <StepEditForm
+                <StepForm
+                  mode="editing"
                   stepNumber={index + 1}
-                  initialTitle={step.title}
-                  initialDelay={step.delay}
+                  title={step.title}
+                  delay={step.delay}
+                  type={step.type}
+                  tooltip={step.tooltip}
+                  recordData={selectedRecordingDetails.userclicknodesSet}
+                  stepIndex={index}
+                  storeRecording={(data) => storeRecording(data, false)}
                   onSave={handleSaveEditedStep}
                   onValidate={handleValidateStep}
                   onCancel={handleCancelEdit}
                   validationCompleted={!!editableStepFormState?.editingWorkflow?.validationCompleted}
+                  validationRequired={!!editableStepFormState?.editingWorkflow?.validationRequired}
                   config={config}
                 />
               ) : (
@@ -648,6 +761,7 @@ export function RecordingDetail(props: RecordingDetailProps) {
                   completed={step.completed}
                   failed={step.failed}
                   onEdit={() => handleEditStep(index)}
+                  onPlay={() => handlePlayNode(index)}
                 />
               )}
             </div>

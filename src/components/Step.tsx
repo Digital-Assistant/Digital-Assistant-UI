@@ -9,9 +9,10 @@ interface StepProps {
   completed: boolean;
   failed?: boolean;
   onEdit?: () => void;
+  onPlay?: () => void;
 }
 
-export function Step({ title, delay, completed, failed, onEdit }: StepProps) {
+export function Step({ title, delay, completed, failed, onEdit, onPlay }: StepProps) {
   const getIconColor = () => {
     if (failed) return "hsl(var(--widget-status-error))";
     if (completed) return "hsl(var(--widget-status-success))";
@@ -20,15 +21,21 @@ export function Step({ title, delay, completed, failed, onEdit }: StepProps) {
 
   return (
     <div className="relative">
-      <div className="content-stretch flex gap-[10px] h-[44px] items-center px-[10px] py-[10px]">
+      <div
+        className={cn(
+          "content-stretch flex gap-[10px] h-[44px] items-center px-[10px] py-[10px]",
+          onPlay && "cursor-pointer hover:bg-gray-50 rounded-[4px]"
+        )}
+        onClick={onPlay}
+      >
         {/* Check/Cancel Icon */}
         <div className="relative shrink-0 size-6">
           <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
             {failed ? (
               <>
                 <g clipPath="url(#clip0_cancel)">
-                  <path 
-                    d={svgPathsNew.p2511d980} 
+                  <path
+                    d={svgPathsNew.p2511d980}
                     fill={getIconColor()}
                   />
                 </g>
@@ -41,8 +48,8 @@ export function Step({ title, delay, completed, failed, onEdit }: StepProps) {
             ) : (
               <>
                 <g clipPath="url(#clip0_check)">
-                  <path 
-                    d={svgPathsNew.p2de1ad00} 
+                  <path
+                    d={svgPathsNew.p2de1ad00}
                     fill={getIconColor()}
                   />
                 </g>
@@ -63,12 +70,15 @@ export function Step({ title, delay, completed, failed, onEdit }: StepProps) {
         )}>
           <p className="leading-[normal] whitespace-pre">{title}</p>
         </div>
-        
+
         <div className="flex-1" />
-        
+
         {/* Edit Icon */}
         <IconButton
-          onClick={onEdit}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit?.();
+          }}
           size="sm"
           aria-label={`Edit ${title}`}
         >
@@ -77,7 +87,7 @@ export function Step({ title, delay, completed, failed, onEdit }: StepProps) {
           </svg>
         </IconButton>
       </div>
-      
+
       {/* Delay indicator if present */}
       {delay && (
         <div className="flex gap-[10px] items-center ml-9 h-[28px]">
@@ -101,7 +111,7 @@ export function Step({ title, delay, completed, failed, onEdit }: StepProps) {
           </div>
         </div>
       )}
-      
+
       {/* Failed step tooltip */}
       {failed && (
         <div className="relative ml-[36px] mt-1 mb-2 z-10">

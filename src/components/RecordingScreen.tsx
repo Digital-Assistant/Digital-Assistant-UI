@@ -30,7 +30,7 @@ import { on, off, trigger } from "../util/events";
 import { translate } from "../util/translation";
 import { addNotification } from "../util/addNotification";
 import { SavingProgress } from "./SavingProgress";
-import { StepEditor } from "./StepEditor";
+import { StepForm } from "./StepForm";
 import { FinalSaveScreen } from "./FinalSaveScreen";
 
 type RecordPhase = "recording" | "naming" | "saving";
@@ -500,7 +500,8 @@ export function RecordingScreen({
           ))} */}
 
           {/* Last step — shown in StepEditor for properties editing */}
-          <StepEditor
+          <StepForm
+            mode="recording"
             onClose={() => {/* staying in recording phase */ }}
             stepNumber={recordData.length}
             completedSteps={recordData.slice(0, -1).map((item, i) => ({

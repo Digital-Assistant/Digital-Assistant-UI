@@ -51,6 +51,21 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
 
   const loadingRef = useRef(false);
 
+  // SDK Subscription to keep selectedRecording in sync during playback
+  useEffect(() => {
+    // Import SDK dynamically if not already available (though it is imported at top)
+    const { coreSDK: DigitalAssistantCoreSDK } = require("../services/coreSDK");
+    const unsubscribe = DigitalAssistantCoreSDK.subscribe((newState: any) => {
+      const sdkSelected = newState.recording?.selectedRecordingDetails;
+      if (sdkSelected && sdkSelected.id === selectedRecording?.id) {
+        // Deep compare/update only if status or details changed
+        // But since it's a new ref from storage, simple update should suffice
+        setSelectedRecording(sdkSelected);
+      }
+    });
+    return unsubscribe;
+  }, [selectedRecording?.id]);
+
   const getSearchResults = useCallback(async (_page: number = 0, refetch = false) => {
     if (!isInitialized || !isAuthenticated) return;
 
