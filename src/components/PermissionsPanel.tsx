@@ -34,9 +34,7 @@ export function PermissionsPanel({
                 <div className="flex flex-col gap-2 ml-8">
                     {config?.permissions &&
                         Object.entries(config.permissions).map(([key, value]) => {
-                            const checked =
-                                permissionsObj &&
-                                typeof permissionsObj[key] !== "undefined";
+                            const checked = !!(permissionsObj && permissionsObj[key]);
 
                             return (
                                 <div key={key} className="flex items-center gap-2">

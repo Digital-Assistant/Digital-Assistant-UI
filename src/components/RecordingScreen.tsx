@@ -25,6 +25,7 @@ import {
   finalSaveSequence,
   validateStepNameWithProfanity,
   validateStepName,
+  fetchStatuses,
 } from "@digital-assistant/core";
 import { on, off, trigger } from "../util/events";
 import { translate } from "../util/translation";
@@ -76,6 +77,7 @@ export function RecordingScreen({
   // ── Permissions ───────────────────────────────────────────────────────────
   const [advBtnShow, setAdvBtnShow] = useState(false);
   const [tmpPermissionsObj, setTmpPermissionsObj] = useState<any>({});
+  const [statusOptions, setStatusOptions] = useState<any[]>([]);
 
   // ── Slow-replay ───────────────────────────────────────────────────────────
   const [slowPlayback, setSlowPlayback] = useState(false);
@@ -127,7 +129,13 @@ export function RecordingScreen({
     if (config?.permissions) {
       setTmpPermissionsObj({ ...config.permissions });
     }
-  }, [config]);
+  }, [config?.permissions]);
+
+  useEffect(() => {
+    if (config?.enableStatusSelection) {
+      fetchStatuses().then(setStatusOptions);
+    }
+  }, [config?.enableStatusSelection]);
 
   // ── Core SDK storage helper ────────────────────────────────────────────────
   const storeRecording = (data: any[]) => {
@@ -240,10 +248,10 @@ export function RecordingScreen({
   const handlePermissions = (key: string, value: any) => {
     setTmpPermissionsObj((prev: any) => {
       const updated = { ...prev };
-      if (updated[key] !== undefined) {
-        delete updated[key];
+      if (updated[key]) {
+        updated[key] = false;
       } else {
-        updated[key] = value;
+        updated[key] = value || true;
       }
       return updated;
     });
@@ -256,6 +264,10 @@ export function RecordingScreen({
     } else {
       setInputError((e: any) => ({ ...e, slowPlayBackTime: true }));
     }
+  };
+
+  const handleStatusChange = (statusId: number) => {
+    setTmpPermissionsObj((prev: any) => ({ ...prev, status: statusId }));
   };
 
   // ── Submit recording (core SDK calls only) ─────────────────────────────────
@@ -453,6 +465,8 @@ export function RecordingScreen({
         recordData={recordData}
         getStepLabel={getStepLabel}
         savingError={savingError}
+        statusOptions={statusOptions}
+        onStatusChange={handleStatusChange}
       />
     );
   }

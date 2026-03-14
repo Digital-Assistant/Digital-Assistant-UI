@@ -6,7 +6,8 @@ import {
   on,
   off,
   trigger,
-  setUserData
+  setUserData,
+  clearUserData
 } from "@digital-assistant/core";
 import { coreSDK as DigitalAssistantCoreSDK } from "../services/coreSDK";
 
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await StorageUtil.remove(CONFIG.SELECTED_RECORDING);
     setIsAuthenticated(false);
     setUser(null);
+    DigitalAssistantCoreSDK.dispatch(clearUserData());
     trigger("RequestUDASessionData", {
       detail: { data: "getusersessiondata" },
       bubbles: false,

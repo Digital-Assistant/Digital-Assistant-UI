@@ -3,9 +3,9 @@ import { PlayerControls } from "./PlayerControls";
 import { FeedbackButtons } from "./FeedbackButtons";
 import { StepsList, StepData } from "./StepsList";
 import { StepForm } from "./StepForm";
-import { LabelEditor } from "./LabelEditor";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { Step } from "./Step";
+import { FinalSaveScreen } from "./FinalSaveScreen";
 import { useState, useEffect, useRef } from "react";
 import {
   deleteRecording,
@@ -80,7 +80,16 @@ export function RecordingDetail(props: RecordingDetailProps) {
 
   // Missing Feature State
   const [isEditingLabels, setIsEditingLabels] = useState(false);
-  const [labels, setLabels] = useState<Array<{ label: string, profanity: boolean }>>([]);
+  const [labels, setLabels] = useState<Array<{ label: string, profanity?: boolean }>>([]);
+  const [name, setName] = useState("");
+  const [inputError, setInputError] = useState<any>({});
+  const [inputAlert, setInputAlert] = useState<any>({});
+  const [inputAt, setInputAt] = useState("");
+  const [checkingProfanity, setCheckingProfanity] = useState(false);
+  const [slowPlayback, setSlowPlayback] = useState(false);
+  const [delayPlaybackTime, setDelayPlaybackTime] = useState(1);
+  const [savingError, setSavingError] = useState(false);
+  const [disableForm, setDisableForm] = useState(false);
   const [advBtnShow, setAdvBtnShow] = useState(false);
   const [tmpPermissionsObj, setTmpPermissionsObj] = useState<any>({});
   const [statusOptions, setStatusOptions] = useState<any[]>([]);
@@ -439,8 +448,6 @@ export function RecordingDetail(props: RecordingDetailProps) {
               urlpath: editingStep.urlpath,
               html5: editingStep.html5,
               clickedpath: editingStep.clickedpath,
-              sessionid: userId || selectedRecordingDetails.usersessionid,
-              usersessionid: userId || selectedRecordingDetails.usersessionid,
             };
             await updateRecordClicks(modifiedData);
             await updateSequenceIndexService(selectedRecordingDetails.id);
@@ -545,98 +552,216 @@ export function RecordingDetail(props: RecordingDetailProps) {
   };
 
   const startEditing = () => {
-    setLabels(getAllLabels());
+    const allLabels = getAllLabels();
+    if (allLabels.length > 0) {
+      setName(allLabels[0].label);
+      setLabels(allLabels.slice(1));
+    } else {
+      setName(getDisplayName());
+      setLabels([]);
+    }
+
+    if (selectedRecordingDetails?.additionalParams) {
+      setTmpPermissionsObj({ ...selectedRecordingDetails.additionalParams });
+      if (selectedRecordingDetails.additionalParams.slowPlaybackTime) {
+        setSlowPlayback(true);
+        setDelayPlaybackTime(selectedRecordingDetails.additionalParams.slowPlaybackTime);
+      }
+    }
+
     setIsEditingLabels(true);
-    setEditRecording(true); // Sync with general edit mode
+    setEditRecording(true);
+    setAdvBtnShow(true); // default to expanded permissions
   };
 
-  const saveLabels = async (newLabels: string[]) => {
-    if (showLoader) showLoader(true);
+  const validateChange = async (value: string) => {
+    setName(value);
+    if (!value.trim()) {
+      setInputError((e: any) => ({ ...e, name: true }));
+      return false;
+    }
+    setInputAlert((a: any) => ({ ...a, name: false }));
+    setInputError((e: any) => ({ ...e, name: false }));
+    return true;
+  };
+
+  const checkProfanityImproved = async (keyword: string): Promise<{ cleaned: string; hasProfanity: boolean }> => {
+    if (!config?.enableProfanity) return { cleaned: keyword.trim(), hasProfanity: false };
+    setCheckingProfanity(true);
     try {
-      // Check each label for profanity if enabled
-      const processedLabels = await Promise.all(newLabels.map(async (label) => {
-        const result = await validateStepNameWithProfanity(label, config?.enableProfanity);
-        if (result.success && result.data?.hasProfanity) {
-          addNotification("Profanity Detected", `Profanity removed from label: ${label}`, "warning");
-          return { label: result.data.cleanedValue, profanity: true };
-        }
-        return { label, profanity: false };
-      }));
+      const result = await validateStepNameWithProfanity(keyword, true);
+      if (result.success) {
+        return {
+          cleaned: result.data?.cleanedValue || keyword.trim(),
+          hasProfanity: !!result.data?.hasProfanity
+        };
+      }
+      return { cleaned: keyword.trim(), hasProfanity: false };
+    } finally {
+      setCheckingProfanity(false);
+    }
+  };
+
+  const checkMainLabelProfanity = async (value: string) => {
+    if (!value.trim()) return;
+    const { cleaned, hasProfanity } = await checkProfanityImproved(value);
+    if (hasProfanity) {
+      setInputAlert((a: any) => ({ ...a, mainLabelProfanity: true }));
+    } else {
+      setInputAlert((a: any) => ({ ...a, mainLabelProfanity: false }));
+    }
+    setInputAt("");
+    setName(cleaned);
+    return validateChange(cleaned);
+  };
+
+  const onExtraLabelChange = async (index: number, value: string) => {
+    const updatedLabels = [...labels];
+    updatedLabels[index] = { ...updatedLabels[index], label: value };
+    setLabels(updatedLabels);
+    if (!value.trim()) {
+      setInputError((e: any) => ({ ...e, [`label${index}`]: { error: true } }));
+      return false;
+    }
+    setInputError((e: any) => ({ ...e, [`label${index}`]: { error: false } }));
+    return true;
+  };
+
+  const checkLabelProfanity = async (index: number, value: string) => {
+    if (!value.trim()) return;
+    const { cleaned, hasProfanity } = await checkProfanityImproved(value);
+    const updatedLabels = [...labels];
+    updatedLabels[index] = {
+      label: cleaned,
+      profanity: hasProfanity,
+    };
+    setLabels(updatedLabels);
+    setInputAt("");
+    return onExtraLabelChange(index, cleaned);
+  };
+
+  const addLabel = () => setLabels([...labels, { label: "", profanity: false }]);
+
+  const removeLabel = (index: number) => {
+    const updated = [...labels];
+    updated.splice(index, 1);
+    setLabels(updated);
+  };
+
+  const handlePermissions = (key: string, value: any) => {
+    setTmpPermissionsObj((prev: any) => {
+      const updated = { ...prev };
+      // Toggle logic: if truthy, set to false; otherwise set to the provided value (which should be truthy)
+      if (updated[key]) {
+        delete updated[key];
+      } else {
+        updated[key] = updated[key];
+      }
+      return updated;
+    });
+  };
+
+  const validateDelayTime = (value: number) => {
+    if (!isNaN(value)) {
+      setDelayPlaybackTime(value);
+    } else {
+      setInputError((e: any) => ({ ...e, slowPlayBackTime: true }));
+    }
+  };
+
+  const getStepLabel = (item: any): string => {
+    const objData = getObjData(item?.objectdata);
+    return objData?.meta?.displayText || item?.clickednodename || "Step";
+  };
+
+  const handleFinalSave = async () => {
+    if (showLoader) showLoader(true);
+    setDisableForm(true);
+
+    try {
+      // 1. Final Profanity check for main name
+      const result = await validateStepNameWithProfanity(name, config?.enableProfanity);
+      let processedName = name;
+      if (result.success && result.data?.hasProfanity) {
+        processedName = result.data.cleanedValue;
+        addNotification("Profanity Detected", "Profanity has been removed from sequence name.", "warning");
+      }
+
+      // 2. Build label array: [mainName, ...aliases]
+      // Fix: Backend expects JSON array of strings, not objects
+      const labelValues = [
+        processedName,
+        ...labels.map(l => l.label)
+      ];
+
+      // 3. Merge additional params (permissions + slow playback)
+      const mergedParams = { ...tmpPermissionsObj };
+      if (config?.enableSlowReplay && slowPlayback) {
+        mergedParams.slowPlaybackTime = delayPlaybackTime;
+      } else {
+        delete mergedParams.slowPlaybackTime;
+      }
+
+      const payload: any = {
+        id: selectedRecordingDetails.id,
+        name: JSON.stringify(labelValues),
+        additionalParams: mergedParams
+      };
+
+      await updateRecordingService(payload);
 
       const updatedDetails = {
         ...selectedRecordingDetails,
-        name: JSON.stringify(processedLabels)
+        ...payload
       };
-
-      await updateRecordingService(updatedDetails);
 
       // Update local state and storage
       setSelectedRecordingDetails(updatedDetails);
       StorageUtil.setToStore(updatedDetails, CONFIG.SELECTED_RECORDING, false);
       setIsEditingLabels(false);
+      setEditRecording(false);
       if (refetchSearch) refetchSearch("on");
       addNotification(translate('labelsUpdated'), translate('labelsUpdatedDescription'), 'success');
     } catch (error) {
-      addNotification(translate('labelsUpdateError'), translate('labelsUpdateErrorDescription'), 'error');
+      console.error("Failed to save sequence metadata:", error);
+      addNotification(translate('labelsUpdateError'), translate('labelsUpdateDescription'), 'error');
+      setSavingError(true);
     } finally {
+      setDisableForm(false);
       if (showLoader) showLoader(false);
     }
   };
 
-  const toggleAdvanced = async () => {
-    if (advBtnShow) {
-      if (showLoader) showLoader(true);
-      try {
-        const updatedDetails = {
-          ...selectedRecordingDetails,
-          additionalParams: tmpPermissionsObj
-        };
 
-        await updateRecordingService(updatedDetails);
-
-        // Update local state and storage
-        setSelectedRecordingDetails(updatedDetails);
-        StorageUtil.setToStore(updatedDetails, CONFIG.SELECTED_RECORDING, false);
-
-        setAdvBtnShow(false);
-      } catch (e) {
-        console.error("Error updating permissions:", e);
-        addNotification("Error", "Failed to update permissions.", "error");
-      } finally {
-        if (showLoader) showLoader(false);
-      }
-    } else {
-      setAdvBtnShow(true);
-    }
-  };
-
-  const handlePermissionsChange = (key: string, value: any) => {
-    let permissions = { ...tmpPermissionsObj };
-    if (permissions[key]) {
-      delete permissions[key];
-    } else {
-      permissions[key] = value;
-    }
-    setTmpPermissionsObj({ ...permissions });
-  };
 
   const updateStatusChange = async (newStatus: number) => {
     if (showLoader) showLoader(true);
     try {
-      let permissions = { ...tmpPermissionsObj };
+      const permissions = { ...tmpPermissionsObj };
       permissions.status = newStatus;
       setTmpPermissionsObj({ ...permissions });
 
-      const updatedDetails = {
-        ...selectedRecordingDetails,
-        additionalParams: permissions
-      };
+      let currentDetails = selectedRecordingDetails;
 
-      await updateRecordingService(updatedDetails);
+      // If not in label-editing mode (where FinalSaveScreen handles final save), 
+      // we persist individual status changes immediately like the old UI.
+      if (!isEditingLabels) {
+        const payload = {
+          id: selectedRecordingDetails.id,
+          additionalParams: permissions
+        };
+        await updateRecordingService(payload);
 
-      // Update local state and storage
-      setSelectedRecordingDetails(updatedDetails);
-      StorageUtil.setToStore(updatedDetails, CONFIG.SELECTED_RECORDING, false);
+        // Update local state
+        currentDetails = { ...selectedRecordingDetails, additionalParams: permissions };
+      } else {
+        // Just update local state for editing session
+        currentDetails = { ...selectedRecordingDetails, additionalParams: permissions };
+      }
+
+      // Sync state and storage
+      setSelectedRecordingDetails(currentDetails);
+      StorageUtil.setToStore(currentDetails, CONFIG.SELECTED_RECORDING, false);
     } catch (e) {
       console.error("Error updating status:", e);
       addNotification("Error", "Failed to update status.", "error");
@@ -645,155 +770,145 @@ export function RecordingDetail(props: RecordingDetailProps) {
     }
   };
 
-  // Initialize permissions and status options
+  // Initialize permissions
   useEffect(() => {
     if (selectedRecordingDetails?.additionalParams) {
-      setTmpPermissionsObj(selectedRecordingDetails.additionalParams);
+      setTmpPermissionsObj({ ...selectedRecordingDetails.additionalParams });
     }
+  }, [selectedRecordingDetails?.id, selectedRecordingDetails?.additionalParams]);
+
+  // Initialize status options
+  useEffect(() => {
     if (config?.enableStatusSelection && selectedRecordingDetails?.usersessionid === userId) {
       fetchStatuses().then(setStatusOptions);
     }
-  }, [selectedRecordingDetails, userId, config]);
+  }, [config?.enableStatusSelection, selectedRecordingDetails?.usersessionid, userId]);
 
 
   if (!props.data) return null; // Or check visibility prop if passed
 
   return (
-    <div className="w-full flex flex-col">
+    <div className="w-full flex flex-col mt-4">
       {/* TitleBar & Label Editor */}
       {!isEditingLabels ? (
-        <div className="relative">
-          <TitleBar
-            title={getDisplayName()}
-            onBack={() => backNav(false)}
-            onTitleChange={handleTitleChange}
-            onShare={handleShareClick}
-            onDelete={handleDeleteClick}
-          />
-          {(config?.enableEditingOfRecordings && selectedRecordingDetails?.usersessionid === userId) && (
-            <button
-              style={{
-                position: 'absolute',
-                top: '8px',
-                right: '48px',
-                padding: '4px 12px',
-                backgroundColor: '#f3f4f6', // gray-100
-                borderRadius: '4px',
-                fontSize: '14px',
-                color: '#374151', // gray-700
-                fontWeight: 500,
-                border: '1px solid #e5e7eb',
-                cursor: 'pointer'
-              }}
-              onClick={startEditing}
-            >
-              {editRecording ? "Done" : "Edit"}
-            </button>
-          )}
-        </div>
-      ) : (
-        <LabelEditor
-          initialLabels={labels}
-          onSave={saveLabels}
-          onCancel={() => setIsEditingLabels(false)}
-        />
-      )}
-
-      {/* Player Controls with Feedback Buttons */}
-      <div className="content-stretch flex gap-[10px] items-center px-0 py-[16px] rounded-[4px] w-full">
-        <PlayerControls
-          status={playStatus as any || 'idle'}
-          onPlay={() => {
-            trigger("closePanel", { action: 'closePanel' });
-            handlePlayStatusChange("on");
-            // Trigger SDK orchestration
-            trigger("ContinuePlay", { action: 'ContinuePlay' });
-          }}
-          onPause={pause}
-          onReplay={replay}
-          onSkipNext={() => {
-            // trigger next?
-          }}
-        />
-
-        <div className="flex-1" />
-
-        <FeedbackButtons
-          isLiked={userVote?.upvote === 1}
-          isDisliked={userVote?.downvote === 1}
-          onLike={() => handleVote('up')}
-          onDislike={() => handleVote('down')}
-          onReport={handleReport}
-        />
-      </div>
-
-      {/* Steps Section */}
-      <div className="w-full flex flex-col">
-        <h3 className="flex flex-col font-['Raleway',sans-serif] font-semibold h-[33px] justify-center leading-[0] text-[20px] mb-4 text-black">
-          <p className="leading-[normal]">Steps</p>
-        </h3>
-
-        <div className="flex flex-col gap-3">
-          {steps.map((step, index) => (
-            <div key={index}>
-              {editingStepIndex === index ? (
-                <StepForm
-                  mode="editing"
-                  stepNumber={index + 1}
-                  title={step.title}
-                  delay={step.delay}
-                  type={step.type}
-                  tooltip={step.tooltip}
-                  recordData={selectedRecordingDetails.userclicknodesSet}
-                  stepIndex={index}
-                  storeRecording={(data) => storeRecording(data, false)}
-                  onSave={handleSaveEditedStep}
-                  onValidate={handleValidateStep}
-                  onCancel={handleCancelEdit}
-                  validationCompleted={!!editableStepFormState?.editingWorkflow?.validationCompleted}
-                  validationRequired={!!editableStepFormState?.editingWorkflow?.validationRequired}
-                  config={config}
-                />
-              ) : (
-                <Step
-                  title={step.title}
-                  delay={step.delay}
-                  completed={step.completed}
-                  failed={step.failed}
-                  onEdit={() => handleEditStep(index)}
-                  onPlay={() => handlePlayNode(index)}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Status Selection & Permissions */}
-      {(config?.enableStatusSelection && selectedRecordingDetails?.usersessionid === userId && editRecording) && (
-        <div className="p-4 border-t border-gray-200">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">{translate('statusLabel')}</label>
-            <select
-              className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              value={tmpPermissionsObj.status || 1}
-              onChange={(e) => updateStatusChange(parseInt(e.target.value))}
-            >
-              {statusOptions.map((opt) => (
-                <option key={opt.id} value={opt.id}>{opt.name}</option>
-              ))}
-            </select>
+        <>
+          <div className="relative">
+            <TitleBar
+              title={getDisplayName()}
+              onBack={() => backNav(false)}
+              onTitleChange={handleTitleChange}
+              onShare={handleShareClick}
+              onDelete={handleDeleteClick}
+              onEdit={startEditing}
+              showEdit={(config?.enableEditingOfRecordings && selectedRecordingDetails?.usersessionid === userId)}
+              isEditing={editRecording}
+            />
           </div>
 
-          <PermissionsPanel
-            config={config}
-            permissionsObj={tmpPermissionsObj}
-            onPermissionChange={handlePermissionsChange}
-            onTimeChange={(val) => setTmpPermissionsObj({ ...tmpPermissionsObj, slowPlaybackTime: val })}
-            isOpen={advBtnShow}
-            onToggle={toggleAdvanced}
-          />
-        </div>
+          {/* Player Controls with Feedback Buttons */}
+          <div className="content-stretch flex gap-[10px] items-center px-0 py-[16px] rounded-[4px] w-full">
+            <PlayerControls
+              status={playStatus as any || 'idle'}
+              onPlay={() => {
+                trigger("closePanel", { action: 'closePanel' });
+                handlePlayStatusChange("on");
+                // Trigger SDK orchestration
+                trigger("ContinuePlay", { action: 'ContinuePlay' });
+              }}
+              onPause={pause}
+              onReplay={replay}
+              onSkipNext={() => {
+                // trigger next?
+              }}
+            />
+
+            <div className="flex-1" />
+
+            <FeedbackButtons
+              isLiked={userVote?.upvote === 1}
+              isDisliked={userVote?.downvote === 1}
+              onLike={() => handleVote('up')}
+              onDislike={() => handleVote('down')}
+              onReport={handleReport}
+            />
+          </div>
+
+          {/* Steps Section */}
+          <div className="w-full flex flex-col">
+            <h3 className="flex flex-col font-['Raleway',sans-serif] font-semibold h-[33px] justify-center leading-[0] text-[20px] mb-4 text-black">
+              <p className="leading-[normal]">Steps</p>
+            </h3>
+
+            <div className="flex flex-col gap-3">
+              {steps.map((step, index) => (
+                <div key={index}>
+                  {editingStepIndex === index ? (
+                    <StepForm
+                      mode="editing"
+                      stepNumber={index + 1}
+                      title={step.title}
+                      delay={step.delay}
+                      type={step.type}
+                      tooltip={step.tooltip}
+                      recordData={selectedRecordingDetails.userclicknodesSet}
+                      stepIndex={index}
+                      storeRecording={(data) => storeRecording(data, false)}
+                      onSave={handleSaveEditedStep}
+                      onValidate={handleValidateStep}
+                      onCancel={handleCancelEdit}
+                      validationCompleted={!!editableStepFormState?.editingWorkflow?.validationCompleted}
+                      validationRequired={!!editableStepFormState?.editingWorkflow?.validationRequired}
+                      config={config}
+                    />
+                  ) : (
+                    <Step
+                      title={step.title}
+                      delay={step.delay}
+                      completed={step.completed}
+                      failed={step.failed}
+                      onEdit={() => handleEditStep(index)}
+                      onPlay={() => handlePlayNode(index)}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        <FinalSaveScreen
+          name={name}
+          setName={setName}
+          labels={labels}
+          setLabels={setLabels}
+          inputError={inputError}
+          inputAlert={inputAlert}
+          setInputAt={setInputAt}
+          validateChange={validateChange}
+          checkMainLabelProfanity={checkMainLabelProfanity}
+          onExtraLabelChange={onExtraLabelChange}
+          checkLabelProfanity={checkLabelProfanity}
+          addLabel={addLabel}
+          removeLabel={removeLabel}
+          config={config}
+          advBtnShow={advBtnShow}
+          setAdvBtnShow={setAdvBtnShow}
+          tmpPermissionsObj={tmpPermissionsObj}
+          handlePermissions={handlePermissions}
+          slowPlayback={slowPlayback}
+          setSlowPlayback={setSlowPlayback}
+          delayPlaybackTime={delayPlaybackTime}
+          validateDelayTime={validateDelayTime}
+          onCancel={() => setIsEditingLabels(false)}
+          onSubmit={handleFinalSave}
+          disableForm={disableForm}
+          screenInfoNotAvailable={false}
+          recordData={selectedRecordingDetails.userclicknodesSet}
+          getStepLabel={getStepLabel}
+          savingError={savingError}
+          statusOptions={statusOptions}
+          onStatusChange={updateStatusChange}
+        />
       )}
     </div>
   );

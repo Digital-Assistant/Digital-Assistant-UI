@@ -178,6 +178,7 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
       <RecordingDetail
         data={selectedRecording}
         title={getRowObject(selectedRecording).sequenceName}
+        config={typeof window !== 'undefined' ? (window as any).UDAGlobalConfig : undefined}
         onBack={() => {
           setSelectedRecording(null);
           StorageUtil.setToStore({}, CONFIG.SELECTED_RECORDING, false);

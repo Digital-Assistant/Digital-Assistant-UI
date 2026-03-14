@@ -33,6 +33,8 @@ interface FinalSaveScreenProps {
   recordData: any[];
   getStepLabel: (item: any) => string;
   savingError: boolean;
+  statusOptions?: any[];
+  onStatusChange?: (statusId: number) => void;
 }
 
 export function FinalSaveScreen({
@@ -65,6 +67,8 @@ export function FinalSaveScreen({
   recordData,
   getStepLabel,
   savingError,
+  statusOptions,
+  onStatusChange,
 }: FinalSaveScreenProps) {
   return (
     <div className="content-stretch flex flex-col gap-[16px] items-start w-full overflow-y-auto max-h-[85vh] p-2">
@@ -87,6 +91,22 @@ export function FinalSaveScreen({
       {screenInfoNotAvailable && (
         <div className="w-full bg-yellow-50 border border-yellow-300 text-yellow-700 rounded-[8px] px-4 py-3 text-sm">
           {translate("screenInfoError")}
+        </div>
+      )}
+
+      {/* Status Selection */}
+      {config?.enableStatusSelection && statusOptions && statusOptions.length > 0 && (
+        <div className="w-full">
+          <p className="font-['Raleway',sans-serif] font-semibold text-[14px] text-black mb-2">{translate('statusLabel')}</p>
+          <select
+            className="w-full bg-white border border-[#c8c8c8] h-[46px] rounded-[8px] px-3 font-['Raleway',sans-serif] text-[14px] text-black outline-none uda_exclude"
+            value={tmpPermissionsObj.status || 1}
+            onChange={(e) => onStatusChange?.(parseInt(e.target.value))}
+          >
+            {statusOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>{opt.name}</option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -219,7 +239,7 @@ export function FinalSaveScreen({
             <div className="w-full mt-2 space-y-2 bg-white/30 p-2 rounded">
               {Object.entries(config.permissions).map(([key, value]) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer self-end">
-                  <input type="checkbox" checked={tmpPermissionsObj[key] !== undefined} onChange={() => handlePermissions(key, value)} className="w-[22px] h-[22px]" />
+                  <input type="checkbox" checked={!!tmpPermissionsObj[key]} onChange={() => handlePermissions(key, value)} className="w-[22px] h-[22px]" />
                   <span className="font-['Jost',sans-serif] text-[16px] text-black">{key}</span>
                 </label>
               ))}
