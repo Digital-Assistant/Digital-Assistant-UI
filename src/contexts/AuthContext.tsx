@@ -7,7 +7,6 @@ import {
   off,
   trigger,
   setUserData,
-  clearUserData
 } from "@digital-assistant/core";
 import { coreSDK as DigitalAssistantCoreSDK } from "../services/coreSDK";
 
@@ -36,12 +35,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearSession = useCallback(async () => {
-    await StorageUtil.remove(CONFIG.USER_AUTH_DATA_KEY);
-    await StorageUtil.remove(CONFIG.UDAKeyCloakKey);
-    await StorageUtil.remove(CONFIG.SELECTED_RECORDING);
+    await authManager.logout();
     setIsAuthenticated(false);
     setUser(null);
-    DigitalAssistantCoreSDK.dispatch(clearUserData());
     trigger("RequestUDASessionData", {
       detail: { data: "getusersessiondata" },
       bubbles: false,

@@ -3,7 +3,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Tab } from "./Tab";
 import { RecordingCard } from "./RecordingCard";
 import { RecordingDetail } from "./RecordingDetail";
-import { fetchSearchResults, fetchRecord, fetchDomain, CONFIG, getRowObject, StorageUtil } from "@digital-assistant/core";
+import { fetchSearchResults, fetchRecord, fetchDomain, CONFIG, getRowObject, StorageUtil, recordUserClickData } from "@digital-assistant/core";
+import { generateShareUrl } from "../util";
 import { useAuth } from "../contexts/AuthContext";
 
 // Define interface for recording data
@@ -123,6 +124,7 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
 
       if (sequenceId) {
         try {
+          recordUserClickData('searchRecordingId', '', parseInt(sequenceId));
           const domain = fetchDomain();
           const record = await fetchRecord({
             id: sequenceId,
@@ -229,6 +231,7 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
             <RecordingCard
               key={recording.id}
               title={sequenceName || "Untitled Recording"}
+              shareUrl={generateShareUrl(recording.id)}
               onClick={() => {
                 setSelectedRecording(recording);
                 StorageUtil.setToStore(recording, CONFIG.SELECTED_RECORDING, false);

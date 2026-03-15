@@ -15,9 +15,10 @@ interface TitleBarProps {
   onEdit?: () => void;
   showEdit?: boolean;
   isEditing?: boolean;
+  shareUrl?: string;
 }
 
-export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEdit, showEdit, isEditing }: TitleBarProps) {
+export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEdit, showEdit, isEditing, shareUrl }: TitleBarProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -176,7 +177,7 @@ export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEd
 
           {showShareDialog && (
             <ShareDialog
-              url={window.location.href}
+              url={shareUrl || window.location.href}
               onClose={() => setShowShareDialog(false)}
             />
           )}

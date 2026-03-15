@@ -7,6 +7,7 @@ import {
     updateStepType,
     saveStepChanges,
     updateStepNameService,
+    updateCustomMetadataService,
     UDAConsoleLogger,
     isHighlightNode,
     fetchHtmlFormElements,
@@ -90,6 +91,8 @@ export function StepForm({
     const [personalInformation, setPersonalInformation] = useState(false);
     const [showSkipTooltip, setShowSkipTooltip] = useState(false);
     const [showPersonalTooltip, setShowPersonalTooltip] = useState(false);
+    const [inputTypeValue, setInputTypeValue] = useState("");
+    const [inputTypeDescription, setInputTypeDescription] = useState("");
 
     // Sequence-level state (recording mode)
     const [localSeqName, setLocalSeqName] = useState(sequenceName);
@@ -122,6 +125,12 @@ export function StepForm({
 
             const newTooltip = meta.tooltipInfo || tooltip || "";
             if (tooltipValue !== newTooltip) setTooltipValue(newTooltip);
+
+            const newInputType = meta.inputType || "";
+            if (inputTypeValue !== newInputType) setInputTypeValue(newInputType);
+
+            const newInputTypeDesc = meta.inputTypeDescription || "";
+            if (inputTypeDescription !== newInputTypeDesc) setInputTypeDescription(newInputTypeDesc);
 
             const delayVal = String(meta.slowPlaybackTime || delay || "");
             if (delayVal) {
@@ -241,13 +250,15 @@ export function StepForm({
                         skipDuringPlay,
                         isPersonal: personalInformation,
                         type: selectedType,
-                        selectedElement
+                        selectedElement,
+                        ...(inputTypeValue && { inputType: inputTypeValue }),
+                        ...(inputTypeDescription && { inputTypeDescription }),
                     }
                 })
             };
             DigitalAssistantCoreSDK.dispatch(updateDraftChanges(draft));
         }
-    }, [mode, homeValue, tooltipValue, selectedType, enableSlowReplay, delaySeconds, skipDuringPlay, personalInformation]);
+    }, [mode, homeValue, tooltipValue, selectedType, enableSlowReplay, delaySeconds, skipDuringPlay, personalInformation, inputTypeValue, inputTypeDescription]);
 
     const handleSaveHome = async () => {
         const result = await validateStepNameWithProfanity(homeValue, config?.enableProfanity);
@@ -633,6 +644,54 @@ export function StepForm({
                                 }}
                                 className="w-full bg-white border border-[#c8c8c8] h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] px-3 font-['Raleway',sans-serif] text-[14px] text-black outline-none"
                             />
+                        </div>
+                    )}
+
+                    {config.enableAISearch && (
+                        <div className="mb-5 space-y-3">
+                            <label className="font-['Montserrat',sans-serif] font-medium text-[16px] text-black block">AI Input</label>
+                            <div className="relative bg-white h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center pl-3 pr-14">
+                                <input
+                                    type="text"
+                                    value={inputTypeValue}
+                                    onChange={(e) => setInputTypeValue(e.target.value)}
+                                    placeholder="Input label (e.g. First Name)"
+                                    className="flex-1 bg-transparent border-none outline-none font-['Roboto',sans-serif] text-[14px] text-black"
+                                />
+                                <button
+                                    onClick={() => {
+                                        if (storeRecording && recordData.length > 0) {
+                                            storeRecording(updateCustomMetadataService(recordData, stepIndex, 'inputType', inputTypeValue));
+                                            if (mode === 'editing') DigitalAssistantCoreSDK.dispatch(startValidation());
+                                        }
+                                    }}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-[30px] flex items-center justify-center bg-black rounded"
+                                    aria-label="Save input label"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="white"><path d="M5 13l4 4L19 7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                </button>
+                            </div>
+                            <div className="relative bg-white h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center pl-3 pr-14">
+                                <input
+                                    type="text"
+                                    value={inputTypeDescription}
+                                    onChange={(e) => setInputTypeDescription(e.target.value)}
+                                    placeholder="Input description (e.g. Enter the user's first name)"
+                                    className="flex-1 bg-transparent border-none outline-none font-['Roboto',sans-serif] text-[14px] text-black"
+                                />
+                                <button
+                                    onClick={() => {
+                                        if (storeRecording && recordData.length > 0) {
+                                            storeRecording(updateCustomMetadataService(recordData, stepIndex, 'inputTypeDescription', inputTypeDescription));
+                                            if (mode === 'editing') DigitalAssistantCoreSDK.dispatch(startValidation());
+                                        }
+                                    }}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-[30px] flex items-center justify-center bg-black rounded"
+                                    aria-label="Save input description"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="white"><path d="M5 13l4 4L19 7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                </button>
+                            </div>
                         </div>
                     )}
 

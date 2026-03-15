@@ -4,6 +4,7 @@ import { ShareDialog } from "./ShareDialog";
 
 interface RecordingCardProps {
   title: string;
+  shareUrl?: string;
   onPlay?: () => void;
   onView?: () => void;
   onShare?: () => void;
@@ -12,6 +13,7 @@ interface RecordingCardProps {
 
 export function RecordingCard({
   title,
+  shareUrl,
   onPlay,
   onView,
   onShare,
@@ -116,7 +118,7 @@ export function RecordingCard({
           {/* Share Dialog positioned relative to button */}
           {showShareDialog && (
             <ShareDialog
-              url="https://recording.com"
+              url={shareUrl || window.location.href}
               onClose={() => setShowShareDialog(false)}
             />
           )}

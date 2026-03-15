@@ -31,9 +31,10 @@ import {
   validateStepNameWithProfanity,
   CONFIG
 } from "@digital-assistant/core";
-import { getUserId } from "../services/userService";
+import { getUserId } from "@digital-assistant/core";
 import { off, on, trigger } from "../util/events";
 import { translate } from "../util/translation";
+import { generateShareUrl } from "../util";
 import { removeToolTip } from "../util/addToolTip";
 import { addNotification } from "../util/addNotification";
 import {
@@ -265,32 +266,9 @@ export function RecordingDetail(props: RecordingDetailProps) {
     if (onBack) onBack(); // Also call prop onBack if strictly needed for UI switch
   };
 
-  const handleShareClick = async () => {
-    const recordingId = selectedRecordingDetails?.id || selectedRecordingDetails?._id;
-
-    if (recordingId) {
-      const el = document.createElement("input");
-      const searchParams = new URLSearchParams(window.location.search);
-      searchParams.set(CONFIG.UDA_URL_Param, recordingId);
-
-      // Use split logic to preserve hash routes if any (matching legacy behavior)
-      const path = window.location.href.split('?')[0];
-      const fullUrl = path + '?' + searchParams.toString();
-
-      el.value = fullUrl;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-
-      recordUserClickData('shareLink', '', recordingId);
-      addNotification(translate('linkCopiedTitle'), translate('linkCopied'), 'success');
-      if (onShare) onShare();
-    } else {
-      console.error("Share failed: Missing recording ID");
-      addNotification("Error", "Could not generate share link: Missing ID", "error");
-    }
-  };
+  const shareUrl = selectedRecordingDetails?.id
+    ? generateShareUrl(selectedRecordingDetails.id)
+    : window.location.href;
 
   const handleDeleteClick = async () => {
     if (selectedRecordingDetails?.id) {
@@ -797,11 +775,12 @@ export function RecordingDetail(props: RecordingDetailProps) {
               title={getDisplayName()}
               onBack={() => backNav(false)}
               onTitleChange={handleTitleChange}
-              onShare={handleShareClick}
+              onShare={() => recordUserClickData('shareLink', '', selectedRecordingDetails?.id)}
               onDelete={handleDeleteClick}
               onEdit={startEditing}
               showEdit={(config?.enableEditingOfRecordings && selectedRecordingDetails?.usersessionid === userId)}
               isEditing={editRecording}
+              shareUrl={shareUrl}
             />
           </div>
 
