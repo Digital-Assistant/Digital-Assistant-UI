@@ -13,12 +13,13 @@ interface TitleBarProps {
   onShare?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
-  showEdit?: boolean;
+  onEditLabels?: () => void;
+  isOwner?: boolean;
   isEditing?: boolean;
   shareUrl?: string;
 }
 
-export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEdit, showEdit, isEditing, shareUrl }: TitleBarProps) {
+export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEdit, onEditLabels, isOwner, isEditing, shareUrl }: TitleBarProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -59,7 +60,7 @@ export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEd
         </IconButton>
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col gap-1">
+      <div className="flex-1 min-w-0">
         {isEditingTitle ? (
           <div className="w-full relative flex items-center gap-2">
             <div className={cn(
@@ -104,16 +105,30 @@ export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEd
             </IconButton>
           </div>
         ) : (
-          <h2 className={cn(
-            "font-['Raleway',sans-serif] font-semibold text-[24px] leading-tight text-black break-words overflow-hidden",
-          )}>
-            {editedTitle}
-          </h2>
+          <div className="flex items-center gap-1">
+            <h2 className={cn(
+              "font-['Raleway',sans-serif] font-semibold text-[24px] leading-tight text-black break-words overflow-hidden",
+            )}>
+              {editedTitle}
+            </h2>
+            {/* Label edit icon — visible only in edit mode */}
+            {isEditing && onEditLabels && (
+              <IconButton
+                onClick={onEditLabels}
+                size="sm"
+                aria-label="Edit labels"
+              >
+                <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
+                  <path d={svgPathsNew.p157c33f0} fill="hsl(var(--widget-icon-primary))" />
+                </svg>
+              </IconButton>
+            )}
+          </div>
         )}
       </div>
 
       <div className="flex items-center gap-2 shrink-0 pt-1">
-        {!isEditingTitle && showEdit && (
+        {isOwner && (
           <button
             onClick={onEdit}
             className={cn(
@@ -124,18 +139,6 @@ export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEd
           >
             {isEditing ? "Done" : "Edit"}
           </button>
-        )}
-
-        {!isEditingTitle && !showEdit && (
-          <IconButton
-            onClick={() => setIsEditingTitle(true)}
-            size="md"
-            aria-label="Edit title"
-          >
-            <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
-              <path d={svgPathsNew.p157c33f0} fill="hsl(var(--widget-icon-primary))" />
-            </svg>
-          </IconButton>
         )}
 
         <div className="relative overflow-visible">

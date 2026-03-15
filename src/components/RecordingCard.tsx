@@ -29,8 +29,11 @@ export function RecordingCard({
 
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onPlay?.();
-    onClick?.(); // Navigate to detail page
+    if (onPlay) {
+      onPlay();
+    } else {
+      onClick?.();
+    }
   };
 
   const handleViewClick = (e: React.MouseEvent) => {

@@ -3,6 +3,7 @@ import { Footer } from "./Footer";
 import { usePanelPosition } from "../contexts/PanelPositionContext";
 import { FloatingButton } from "./FloatingButton";
 import { useRef, useEffect } from "react";
+import { on, off } from "@digital-assistant/core";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -19,7 +20,7 @@ export function Layout({
   searchKeyword,
   onSearchChange
 }: LayoutProps) {
-  const { position, coordinates, setCoordinates, isDragging, setIsDragging, isPanelVisible, panelHeight } = usePanelPosition();
+  const { position, coordinates, setCoordinates, isDragging, setIsDragging, isPanelVisible, openPanel, closePanel, panelHeight } = usePanelPosition();
   const panelRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef({ x: 0, y: 0 });
 
@@ -41,6 +42,15 @@ export function Layout({
       y: e.clientY - rect.top
     };
   };
+
+  useEffect(() => {
+    on("openPanel", openPanel);
+    on("closePanel", closePanel);
+    return () => {
+      off("openPanel", openPanel);
+      off("closePanel", closePanel);
+    };
+  }, []);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {

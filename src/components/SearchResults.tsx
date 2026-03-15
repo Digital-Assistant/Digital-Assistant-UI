@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Tab } from "./Tab";
 import { RecordingCard } from "./RecordingCard";
 import { RecordingDetail } from "./RecordingDetail";
-import { fetchSearchResults, fetchRecord, fetchDomain, CONFIG, getRowObject, StorageUtil, recordUserClickData } from "@digital-assistant/core";
+import { fetchSearchResults, fetchRecord, fetchDomain, CONFIG, getRowObject, StorageUtil, recordUserClickData, trigger } from "@digital-assistant/core";
 import { generateShareUrl } from "../util";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -198,7 +198,7 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
 
   return (
     <>
-      {/* Tabs */}
+      {/* Tabs - hidden until trending/popular/latest functionality is implemented
       <nav
         className="w-full h-10 flex gap-0 mb-6"
         aria-label="Recording filters"
@@ -222,6 +222,7 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
           onClick={() => setActiveTab("latest")}
         />
       </nav>
+      */}
 
       {/* Recording Cards */}
       <div className="w-full flex flex-col gap-[10px] pb-4">
@@ -232,6 +233,15 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
               key={recording.id}
               title={sequenceName || "Untitled Recording"}
               shareUrl={generateShareUrl(recording.id)}
+              onPlay={() => {
+                recordUserClickData('play', '', recording.id);
+                StorageUtil.setToStore(recording, CONFIG.SELECTED_RECORDING, false);
+                StorageUtil.setToStore("on", CONFIG.RECORDING_IS_PLAYING, true);
+                setSelectedRecording(recording);
+                trigger("closePanel", { action: 'closePanel' });
+                // Delay ContinuePlay so RecordingDetail mounts and sets playStatus first
+                setTimeout(() => trigger("ContinuePlay", { action: 'ContinuePlay' }), 100);
+              }}
               onClick={() => {
                 setSelectedRecording(recording);
                 StorageUtil.setToStore(recording, CONFIG.SELECTED_RECORDING, false);

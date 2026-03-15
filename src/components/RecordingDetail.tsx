@@ -29,6 +29,7 @@ import {
   isHighlightNode,
   saveStepChanges,
   validateStepNameWithProfanity,
+  setSelectedRecordingDetails as setReduxSelectedRecordingDetails,
   CONFIG
 } from "@digital-assistant/core";
 import { getUserId } from "@digital-assistant/core";
@@ -111,6 +112,13 @@ export function RecordingDetail(props: RecordingDetailProps) {
         checkStatus();
       }
     })();
+
+    // Reflect playing state in UI if RECORDING_IS_PLAYING was set for this specific recording
+    const storedPlayStatus = StorageUtil.getFromStore(CONFIG.RECORDING_IS_PLAYING, true);
+    const storedRecording = StorageUtil.getFromStore(CONFIG.SELECTED_RECORDING, false);
+    if (storedPlayStatus === "on" && storedRecording?.id === data?.id) {
+      setPlayStatus('playing');
+    }
   }, []);
 
   useEffect(() => {
@@ -141,9 +149,10 @@ export function RecordingDetail(props: RecordingDetailProps) {
 
   // Sync selectedRecordingDetails from SDK Redux store (Source of Truth during Playback)
   useEffect(() => {
-    if (sdkState.recording && sdkState.recording.selectedRecordingDetails) {
-      console.log("RecordingDetail: Syncing selectedRecordingDetails from SDK store",
-        sdkState.recording.selectedRecordingDetails.userclicknodesSet.map((n: any) => n.status));
+    if (
+      sdkState.recording?.selectedRecordingDetails &&
+      sdkState.recording.selectedRecordingDetails.id === data?.id
+    ) {
       setSelectedRecordingDetails(sdkState.recording.selectedRecordingDetails);
     }
   }, [sdkState.recording?.selectedRecordingDetails]);
@@ -258,12 +267,15 @@ export function RecordingDetail(props: RecordingDetailProps) {
     if (openPanel) {
       trigger("openPanel", { action: 'openPanel' });
     }
+    StorageUtil.setToStore("off", CONFIG.RECORDING_IS_PLAYING, true);
+    // Clear Redux store so next RecordingDetail mount doesn't inherit completed state
+    DigitalAssistantCoreSDK.dispatch(setReduxSelectedRecordingDetails(null));
     resetStatus();
     removeToolTip();
     setEditRecording(false);
     DigitalAssistantCoreSDK.dispatch(cancelStepEditing());
     if (cancelHandler) cancelHandler(forceRefresh);
-    if (onBack) onBack(); // Also call prop onBack if strictly needed for UI switch
+    if (onBack) onBack();
   };
 
   const shareUrl = selectedRecordingDetails?.id
@@ -763,7 +775,19 @@ export function RecordingDetail(props: RecordingDetailProps) {
   }, [config?.enableStatusSelection, selectedRecordingDetails?.usersessionid, userId]);
 
 
-  if (!props.data) return null; // Or check visibility prop if passed
+  const isOwner = !!userId && selectedRecordingDetails?.usersessionid === userId;
+
+  const toggleEditMode = () => {
+    if (editRecording) {
+      // Done — exit edit mode, cancel any in-progress step edit
+      setEditRecording(false);
+      setIsEditingLabels(false);
+      setEditingStepIndex(null);
+      DigitalAssistantCoreSDK.dispatch(cancelStepEditing());
+    } else {
+      setEditRecording(true);
+    }
+  };
 
   return (
     <div className="w-full flex flex-col mt-4">
@@ -777,8 +801,9 @@ export function RecordingDetail(props: RecordingDetailProps) {
               onTitleChange={handleTitleChange}
               onShare={() => recordUserClickData('shareLink', '', selectedRecordingDetails?.id)}
               onDelete={handleDeleteClick}
-              onEdit={startEditing}
-              showEdit={(config?.enableEditingOfRecordings && selectedRecordingDetails?.usersessionid === userId)}
+              onEdit={toggleEditMode}
+              onEditLabels={startEditing}
+              isOwner={isOwner}
               isEditing={editRecording}
               shareUrl={shareUrl}
             />
@@ -845,6 +870,7 @@ export function RecordingDetail(props: RecordingDetailProps) {
                       delay={step.delay}
                       completed={step.completed}
                       failed={step.failed}
+                      showEditIcon={editRecording && isOwner}
                       onEdit={() => handleEditStep(index)}
                       onPlay={() => handlePlayNode(index)}
                     />

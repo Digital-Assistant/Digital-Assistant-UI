@@ -5,6 +5,7 @@ import { SettingsMenu } from "./SettingsMenu";
 import { usePanelPosition } from "../contexts/PanelPositionContext";
 import { useAuth } from "../contexts/AuthContext";
 import { coreSDK } from "../services/coreSDK";
+import { recordUserClickData } from "@digital-assistant/core";
 
 interface HeaderProps {
   onRecClick?: () => void;
@@ -33,7 +34,7 @@ export function Header({
   const [localSearchValue, setLocalSearchValue] = useState(searchKeyword);
   const [isMicActive, setIsMicActive] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("en-US"); // Default to English US
-  const { position, togglePosition, setIsPanelVisible, panelHeight, togglePanelHeight } = usePanelPosition();
+  const { position, togglePosition, setIsPanelVisible, isPanelVisible, panelHeight, togglePanelHeight } = usePanelPosition();
   const headerRef = useRef<HTMLDivElement>(null);
 
   // Sync local state if prop changes (e.g. cleared externally)
@@ -138,10 +139,12 @@ export function Header({
   }, []);
 
   const handleMinimize = () => {
-    setIsPanelVisible(false);
+    recordUserClickData('UDAPanelClosed');
+    setIsPanelVisible(!isPanelVisible);
   };
 
   const handleClose = () => {
+    recordUserClickData('UDAPanelClosed');
     setIsPanelVisible(false);
   };
 
@@ -246,6 +249,7 @@ export function Header({
             </button>
           )}
 
+          {/* Settings icon - hidden until settings functionality is implemented
           <div className="relative">
             <button
               onClick={() => setShowSettingsMenu(!showSettingsMenu)}
@@ -277,12 +281,12 @@ export function Header({
                 </svg>
               </div>
             </button>
-
-            {/* Settings Menu - Only show when authenticated */}
+            Settings Menu - Only show when authenticated
             {isAuthenticated && showSettingsMenu && (
               <SettingsMenu onClose={() => setShowSettingsMenu(false)} />
             )}
           </div>
+          */}
 
           <button
             onClick={handleClose}

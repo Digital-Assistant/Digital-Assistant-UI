@@ -13,6 +13,8 @@ interface PanelPositionContextType {
   setIsDragging: (dragging: boolean) => void;
   isPanelVisible: boolean;
   setIsPanelVisible: (visible: boolean) => void;
+  openPanel: () => void;
+  closePanel: () => void;
   floatingIconPosition: { x: number; y: number };
   setFloatingIconPosition: (coords: { x: number; y: number }) => void;
   panelHeight: PanelHeight;
@@ -26,7 +28,10 @@ export function PanelPositionProvider({ children }: { children: ReactNode }) {
   const [position, setPosition] = useState<PanelPosition>('right');
   const [coordinates, setCoordinates] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [isPanelVisible, setIsPanelVisible] = useState(true);
+  const [isPanelVisible, setIsPanelVisible] = useState(false);
+
+  const openPanel = () => setIsPanelVisible(true);
+  const closePanel = () => setIsPanelVisible(false);
   const [floatingIconPosition, setFloatingIconPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [panelHeight, setPanelHeight] = useState<PanelHeight>('full');
 
@@ -52,6 +57,8 @@ export function PanelPositionProvider({ children }: { children: ReactNode }) {
       setIsDragging,
       isPanelVisible,
       setIsPanelVisible,
+      openPanel,
+      closePanel,
       floatingIconPosition,
       setFloatingIconPosition,
       panelHeight,

@@ -8,11 +8,12 @@ interface StepProps {
   delay?: number;
   completed: boolean;
   failed?: boolean;
+  showEditIcon?: boolean;
   onEdit?: () => void;
   onPlay?: () => void;
 }
 
-export function Step({ title, delay, completed, failed, onEdit, onPlay }: StepProps) {
+export function Step({ title, delay, completed, failed, showEditIcon, onEdit, onPlay }: StepProps) {
   const getIconColor = () => {
     if (failed) return "hsl(var(--widget-status-error))";
     if (completed) return "hsl(var(--widget-status-success))";
@@ -73,19 +74,21 @@ export function Step({ title, delay, completed, failed, onEdit, onPlay }: StepPr
 
         <div className="flex-1" />
 
-        {/* Edit Icon */}
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit?.();
-          }}
-          size="sm"
-          aria-label={`Edit ${title}`}
-        >
-          <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
-            <path d={svgPathsNew.p157c33f0} fill="hsl(var(--widget-icon-primary))" />
-          </svg>
-        </IconButton>
+        {/* Edit Icon - only visible when in edit mode */}
+        {showEditIcon && (
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit?.();
+            }}
+            size="sm"
+            aria-label={`Edit ${title}`}
+          >
+            <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
+              <path d={svgPathsNew.p157c33f0} fill="hsl(var(--widget-icon-primary))" />
+            </svg>
+          </IconButton>
+        )}
       </div>
 
       {/* Delay indicator if present */}
