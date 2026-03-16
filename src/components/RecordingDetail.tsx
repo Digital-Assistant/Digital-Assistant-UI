@@ -163,7 +163,15 @@ export function RecordingDetail(props: RecordingDetailProps) {
     const handleBackNavEvent = () => backNav();
     const handlePauseEvent = () => setPlayStatus('paused');
     const handlePlayStartedEvent = () => setPlayStatus('playing');
-    const handlePlayCompletedEvent = () => setPlayStatus('completed');
+    const handlePlayCompletedEvent = () => {
+      setPlayStatus('completed');
+      // If enableHidePanelAfterCompletion is true, navigate back without opening the panel
+      if (config?.enableHidePanelAfterCompletion) {
+        backNav(false, false);
+      } else {
+        trigger("openPanel", { action: 'openPanel' });
+      }
+    };
 
     on("BackToSearchResults", handleBackNavEvent);
     on("PausePlay", handlePauseEvent);
@@ -801,8 +809,8 @@ export function RecordingDetail(props: RecordingDetailProps) {
               onTitleChange={handleTitleChange}
               onShare={() => recordUserClickData('shareLink', '', selectedRecordingDetails?.id)}
               onDelete={handleDeleteClick}
-              onEdit={toggleEditMode}
-              onEditLabels={startEditing}
+              onEdit={isOwner && config?.enableEditingOfRecordings ? toggleEditMode : undefined}
+              onEditLabels={isOwner && config?.enableEditingOfRecordings ? startEditing : undefined}
               isOwner={isOwner}
               isEditing={editRecording}
               shareUrl={shareUrl}
@@ -870,7 +878,7 @@ export function RecordingDetail(props: RecordingDetailProps) {
                       delay={step.delay}
                       completed={step.completed}
                       failed={step.failed}
-                      showEditIcon={editRecording && isOwner}
+                      showEditIcon={editRecording && isOwner && config?.enableEditingOfRecordings}
                       onEdit={() => handleEditStep(index)}
                       onPlay={() => handlePlayNode(index)}
                     />

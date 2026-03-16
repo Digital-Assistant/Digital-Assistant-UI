@@ -312,7 +312,7 @@ export function RecordingScreen({
 
     // Apply status selection
     const mergedParams = { ...finalParams };
-    if (global?.UDAGlobalConfig?.enableStatusSelection && !mergedParams.hasOwnProperty("status")) {
+    if (config?.enableStatusSelection && !mergedParams.hasOwnProperty("status")) {
       mergedParams.enableStatus = 1;
     }
     if (Object.keys(mergedParams).length > 0) {

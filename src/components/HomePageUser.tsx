@@ -18,6 +18,7 @@ export default function HomePageUser() {
   const { isAuthenticated } = useAuth();
   const [searchKeyword, setSearchKeyword] = useState("");
   const [displayKeyword, setDisplayKeyword] = useState("");
+  const config = typeof window !== 'undefined' ? (window as any).UDAGlobalConfig : undefined;
 
   /**
    * Initialise from storage — if recording was active before the page
@@ -102,7 +103,7 @@ export default function HomePageUser() {
 
   return (
     <Layout
-      onRecClick={recordingState === 'idle' ? handleRecClick : undefined}
+      onRecClick={(recordingState === 'idle' && config?.enableRecording !== false) ? handleRecClick : undefined}
       searchKeyword={displayKeyword}
       onSearchChange={handleSearchChange}
     >
@@ -114,7 +115,7 @@ export default function HomePageUser() {
           onCancel={handleCancel}
           recordHandler={recordHandler}
           refetchSearch={refetchSearch}
-          config={typeof window !== 'undefined' ? (window as any).UDAGlobalConfig : undefined}
+          config={config}
         />
       )}
     </Layout>

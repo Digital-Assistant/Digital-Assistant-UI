@@ -144,6 +144,16 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
     initDeepLink();
   }, [isAuthenticated, isInitialized]);
 
+  // Refetch search when permissions-related config flags change at runtime
+  useEffect(() => {
+    if (isInitialized && isAuthenticated) {
+      getSearchResults(0, true);
+    }
+  }, [
+    (typeof window !== 'undefined' && (window as any).UDAGlobalConfig?.enablePermissions),
+    (typeof window !== 'undefined' && (window as any).UDAGlobalConfig?.enableForAllDomains),
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Initial load & Search trigger
   useEffect(() => {
     if (isInitialized && isAuthenticated) {
