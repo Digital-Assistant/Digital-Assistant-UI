@@ -11,6 +11,9 @@ interface LayoutProps {
   showSearchBar?: boolean;
   searchKeyword?: string;
   onSearchChange?: (display: string, query: string) => void;
+  config?: any;
+  minimizeForRecording?: boolean;
+  onFloatingButtonClick?: () => void;
 }
 
 export function Layout({
@@ -18,7 +21,10 @@ export function Layout({
   onRecClick,
   showSearchBar = true,
   searchKeyword,
-  onSearchChange
+  onSearchChange,
+  config,
+  minimizeForRecording = false,
+  onFloatingButtonClick,
 }: LayoutProps) {
   const { position, coordinates, setCoordinates, isDragging, setIsDragging, isPanelVisible, openPanel, closePanel, panelHeight } = usePanelPosition();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -42,6 +48,19 @@ export function Layout({
       y: e.clientY - rect.top
     };
   };
+
+  // Wire udaDivId element to open the panel when enableUdaIcon is false
+  useEffect(() => {
+    if (!config?.enableUdaIcon && config?.udaDivId) {
+      const udaNode = document.getElementById(config.udaDivId);
+      if (udaNode) {
+        udaNode.classList.add('uda_exclude');
+        const handler = () => openPanel();
+        udaNode.addEventListener('click', handler);
+        return () => udaNode.removeEventListener('click', handler);
+      }
+    }
+  }, [config?.enableUdaIcon, config?.udaDivId]);
 
   useEffect(() => {
     on("openPanel", openPanel);
@@ -119,11 +138,17 @@ export function Layout({
 
   return (
     <div className="bg-[#f6f6f6] min-h-screen flex items-center p-4">
-      {/* Floating Button - Shows when panel is hidden */}
-      {!isPanelVisible && <FloatingButton />}
+      {/* Floating Button — shown when panel is hidden AND enableUdaIcon is true (or not set).
+           Also shown when panel is minimized during recording (enableUDAIconDuringRecording). */}
+      {(!isPanelVisible || minimizeForRecording) && config?.enableUdaIcon !== false && (
+        <FloatingButton
+          customIcon={config?.enableCustomIcon ? config?.customIcon : undefined}
+          onOpen={onFloatingButtonClick}
+        />
+      )}
 
-      {/* Widget Container with Border - Shows when visible */}
-      {isPanelVisible && (
+      {/* Widget Container — hidden when minimized during recording */}
+      {isPanelVisible && !minimizeForRecording && (
         <div
           ref={panelRef}
           onMouseDown={handleMouseDown}
@@ -141,6 +166,7 @@ export function Layout({
               showSearchBar={showSearchBar}
               searchKeyword={searchKeyword}
               onSearchChange={onSearchChange}
+              config={config}
             />
           </div>
 
