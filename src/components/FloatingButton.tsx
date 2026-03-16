@@ -1,7 +1,7 @@
 import { usePanelPosition } from "../contexts/PanelPositionContext";
 import { useRef, useEffect, useState } from "react";
 
-export function FloatingButton() {
+export function FloatingButton({ customIcon, onOpen }: { customIcon?: string; onOpen?: () => void }) {
   const { setIsPanelVisible, floatingIconPosition, setFloatingIconPosition } = usePanelPosition();
   const [isDragging, setIsDragging] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -58,8 +58,8 @@ export function FloatingButton() {
   }, [isDragging, setFloatingIconPosition]);
 
   const handleClick = (e: React.MouseEvent) => {
-    // Only open panel if not dragging
     if (!isDragging) {
+      onOpen?.();
       setIsPanelVisible(true);
     }
   };
@@ -101,14 +101,18 @@ export function FloatingButton() {
       title="Click to open UDAN | Drag to move"
     >
       <div className="flex flex-col items-center justify-center gap-1">
-        {/* UDAN Logo Text */}
-        <span className="font-['Raleway',sans-serif] font-bold text-[16px] text-black leading-none">
-          UDAN
-        </span>
-        {/* Beta Badge */}
-        <span className="bg-[#cccccc] text-[#1e1e1e] text-[6px] font-['Raleway',sans-serif] px-1 rounded h-[10px] flex items-center leading-none">
-          Beta
-        </span>
+        {customIcon ? (
+          <img src={customIcon} alt="UDAN" style={{ width: '40px', height: '40px', objectFit: 'contain', borderRadius: '50%' }} />
+        ) : (
+          <>
+            <span className="font-['Raleway',sans-serif] font-bold text-[16px] text-black leading-none">
+              UDAN
+            </span>
+            <span className="bg-[#cccccc] text-[#1e1e1e] text-[6px] font-['Raleway',sans-serif] px-1 rounded h-[10px] flex items-center leading-none">
+              Beta
+            </span>
+          </>
+        )}
       </div>
     </button>
   );
