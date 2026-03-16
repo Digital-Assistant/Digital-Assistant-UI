@@ -12,6 +12,7 @@ interface HeaderProps {
   showSearchBar?: boolean;
   searchKeyword?: string;
   onSearchChange?: (display: string, query: string) => void;
+  config?: any;
 }
 
 const speech = (window as any).webkitSpeechRecognition;
@@ -24,7 +25,8 @@ export function Header({
   onRecClick,
   showSearchBar = true,
   searchKeyword = "",
-  onSearchChange
+  onSearchChange,
+  config,
 }: HeaderProps) {
   const { isAuthenticated } = useAuth();
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
@@ -352,6 +354,8 @@ export function Header({
                 </div>
               </button>
             )}
+            {/* Mic button — only shown when enableSpeechToText is true */}
+            {config?.enableSpeechToText && (
             <button
               onClick={toggleMic}
               className="shrink-0 hover:opacity-80 transition-opacity relative"
@@ -388,6 +392,9 @@ export function Header({
                 </svg>
               </div>
             </button>
+            )}
+            {/* Language selector — only shown when enableMultilingual is true */}
+            {config?.enableMultilingual && (
             <div className="relative">
               <button
                 onClick={() => setShowLanguageSelector(!showLanguageSelector)}
@@ -414,8 +421,6 @@ export function Header({
                   </svg>
                 </div>
               </button>
-
-              {/* Language Selector Dropdown */}
               {showLanguageSelector && (
                 <LanguageSelector
                   selectedLanguage={selectedLanguage}
@@ -424,6 +429,7 @@ export function Header({
                 />
               )}
             </div>
+            )}
           </div>
         </div>
       )}
@@ -473,6 +479,8 @@ export function Header({
               </button>
             )}
 
+            {/* Mic button — only shown when enableSpeechToText is true */}
+            {config?.enableSpeechToText && (
             <button
               onClick={toggleMic}
               className="shrink-0 hover:opacity-80 transition-opacity relative"
@@ -509,6 +517,9 @@ export function Header({
                 </svg>
               </div>
             </button>
+            )}
+            {/* Language selector — only shown when enableMultilingual is true */}
+            {config?.enableMultilingual && (
             <div className="relative">
               <button
                 onClick={() => setShowLanguageSelector(!showLanguageSelector)}
@@ -535,8 +546,6 @@ export function Header({
                   </svg>
                 </div>
               </button>
-
-              {/* Language Selector Dropdown */}
               {showLanguageSelector && (
                 <LanguageSelector
                   selectedLanguage={selectedLanguage}
@@ -545,6 +554,7 @@ export function Header({
                 />
               )}
             </div>
+            )}
           </div>
         </div>
       )}

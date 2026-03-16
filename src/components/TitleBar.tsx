@@ -128,7 +128,7 @@ export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEd
       </div>
 
       <div className="flex items-center gap-2 shrink-0 pt-1">
-        {isOwner && (
+        {isOwner && onEdit && (
           <button
             onClick={onEdit}
             className={cn(
@@ -141,6 +141,7 @@ export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEd
           </button>
         )}
 
+{isOwner && (
         <div className="relative overflow-visible">
           <IconButton
             onClick={handleDeleteClick}
@@ -166,6 +167,7 @@ export function TitleBar({ title, onBack, onTitleChange, onShare, onDelete, onEd
             />
           )}
         </div>
+)}
 
         <div className="relative overflow-visible">
           <IconButton

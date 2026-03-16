@@ -468,11 +468,14 @@ export function StepForm({
                             <p className="font-['Roboto',sans-serif] text-[20px] text-white tracking-[0.25px] leading-[20px]">
                                 {homeValue || (stepNumber === 1 && mode === 'recording' ? "Home" : "Step Title")}
                             </p>
+                            {/* Edit pencil: always shown in editing mode; in recording mode only when enableEditClickedName is true */}
+                            {(mode === 'editing' || config?.enableEditClickedName) && (
                             <button onClick={() => setIsEditingHome(true)} className="absolute right-3 w-6 h-6 hover:opacity-80 transition-opacity" aria-label="Edit">
                                 <svg className="block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 24 24">
                                     <path d={svgPaths.p157c33f0} fill="white" />
                                 </svg>
                             </button>
+                            )}
                         </div>
                     ) : (
                         <div className="relative bg-white h-[46px] rounded-[8px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center pl-3 pr-14">
