@@ -169,7 +169,7 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
           getSearchResults(page + 1);
         }
       },
-      { threshold: 1.0 }
+      { threshold: 0.1 }
     );
 
     if (observerTarget.current) {

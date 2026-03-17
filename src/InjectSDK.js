@@ -12,5 +12,5 @@ if (enableUDAPlugin === false) {
     console.log('Plugin disabled due to lower resolution');
 } else {
     require("./AuthService");
-    require("./index");
+    require("./main");
 }

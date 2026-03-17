@@ -1,14 +1,25 @@
+# Dependencies
 node_modules/
+
+# Build outputs
 build/
-!environments/development.env
+
+# dist/ is committed for publishing — do not ignore
+
+# Environment files
 environments/
+
+# OS & IDE
 .DS_Store
 .vscode/
 .idea/
-package-lock.json
-UDAN-Core/
-dist/
 
+# Misc
+package-lock.json
+
+# Local symlink (not committed)
 UDAN-Core
 new-ui-html
-new-ui-html/
+old-ui
+improvements.md
+README.md

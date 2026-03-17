@@ -79,13 +79,12 @@
     "babel-plugin-transform-react-inline-elements": "^6.22.0",
     "babel-plugin-transform-react-pure-class-to-function": "^1.0.1",
     "babel-plugin-transform-react-remove-prop-types": "^0.4.24",
-    "compression-webpack-plugin": "^11.1.0",
-    "copy-webpack-plugin": "^13.0.1",
+    "compression-webpack-plugin": "^12.0.0",
+    "copy-webpack-plugin": "^14.0.0",
     "core-js": "^3.47.0",
     "css-loader": "^7.1.2",
-    "css-minimizer-webpack-plugin": "^7.0.4",
+    "css-minimizer-webpack-plugin": "^8.0.0",
     "dotenv": "^17.2.3",
-    "dotenv-webpack": "^8.1.1",
     "file-loader": "^6.2.0",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^30.2.0",
@@ -110,8 +109,8 @@
   },
   "scripts": {
     "start": "webpack --watch",
-    "build:dev": "webpack --env build=development",
     "build": "webpack",
+    "build:dev": "webpack --env build=development",
     "build:prod": "webpack --env build=production",
     "build:qa": "webpack --env build=qa"
   }

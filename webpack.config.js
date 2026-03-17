@@ -3,16 +3,10 @@
  * Webpack configuration
  */
 
-/**
- * At its core, webpack is a static module bundler for modern JavaScript applications. When webpack processes your application,
- * it internally builds a dependency graph from one or more entry points and then combines every module your project needs into
- * one or more bundles, which are static assets to serve your content from.
- */
-
 const path = require("path");
+const fs = require("fs");
 const webpack = require("webpack");
 const CopyPlugin = require("copy-webpack-plugin");
-const Dotenv = require("dotenv-webpack");
 const CssMinimizerPlugin = require("css-minimizer-webpack-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 
@@ -26,26 +20,22 @@ const customStyleLoader = {
                 parent.appendChild(linkTag);
             }, 10);
         },
-        // injectType: "linkTag"
     }
 }
 
+// Resolve the real path of UDAN-Core (follow symlink)
+const udanCorePath = fs.realpathSync(path.resolve(__dirname, 'UDAN-Core'));
+
 module.exports = (env, argv) => {
-    // reduce it to a nice object, the same as before
-
-    const envFile =
-        "./environments/" + (env.build ? `${env.build}.env` : "local.env");
-
-    const buildPath =
-        (env.build && (env.build === "production" || env.build === "development")) ? "dist" : "build";
+    const isProd = env.build === "production" || env.build === "qa";
+    const buildPath = isProd ? "dist" : "build";
 
     const webpackConfig = {
-        cache: { type: 'filesystem' },
+        cache: {
+            type: 'filesystem',
+            buildDependencies: { config: [__filename] },
+        },
         entry: {
-            // string | object | array
-            // defaults to ./src
-            // Here the application starts executing
-            // and webpack starts bundling
             UDAHeaders: "./src/Headers.js",
             UDAInjectHeaders: "./src/InjectHeaders.js",
             UDASdk: "./src/main.tsx",
@@ -53,167 +43,100 @@ module.exports = (env, argv) => {
             UDALoad: "./src/InjectSDK.js",
             UDAPluginSDK: "./src/ExtensionSDK.js",
         },
-        mode: "development", // "production" | "development" | "none"
-        devtool: "cheap-module-source-map", // enum
+        mode: isProd ? "production" : "development",
+        devtool: isProd ? false : "cheap-module-source-map",
         watch: false,
-
         watchOptions: {
             ignored: "/node_modules/",
         },
-
         module: {
-            // configuration regarding modules
             rules: [
-                // rules for modules (configure loaders, parser options, etc.)
                 {
-                    // Conditions:
                     test: /\.(js|jsx)$/,
                     exclude: [
                         /(node_modules|bower_components)/,
-                        path.resolve(__dirname, "UDAN-Core")
+                        udanCorePath,
                     ],
-                    loader: "babel-loader", // the loader which should be applied, it'll be resolved relative to the context
-                    options: { presets: ["@babel/env", "@babel/preset-react"] }, // options for the loader
+                    loader: "babel-loader",
+                    options: { presets: ["@babel/env", "@babel/preset-react"] },
                 },
                 {
                     test: /\.(ts|tsx)$/,
                     exclude: [
                         /node_modules/,
-                        path.resolve(__dirname, "UDAN-Core")
+                        udanCorePath,
                     ],
                     loader: "ts-loader",
+                    options: { transpileOnly: !isProd },
                 },
                 {
                     test: /\.css$/,
                     exclude: /node_modules/,
-                    use: [
-                        customStyleLoader,
-                        "css-loader"
-                    ],
+                    use: [customStyleLoader, "css-loader"],
                 },
                 {
-                    // Conditions:
                     test: /\.s(a|c)ss$/,
                     exclude: /node_modules/,
-                    use: [
-                        // When multiple loader configuration needed
-                        customStyleLoader,
-                        "css-loader",
-                        "sass-loader",
-                    ],
+                    use: [customStyleLoader, "css-loader", "sass-loader"],
                 },
                 {
-                    test: /\.(png|jpe?g|gif|svg|eot|ttf|woff|woff2)$/i,
-                    // More information here https://webpack.js.org/guides/asset-modules/
+                    test: /\.(png|jpe?g|gif|eot|ttf|woff|woff2)$/i,
                     type: "asset",
-                },
-                {
-                    // Conditions:
-                    test: /\.(jpe?g|png|gif|svg)$/i,
-                    use: [
-                        {
-                            // When multiple loader configuration needed
-                            loader: "file-loader",
-                            options: {
-                                name: "[name].[ext]",
-                                outputPath: "/images/",
-                            },
-                        },
-                    ],
                 },
                 {
                     test: /\.svg$/,
                     exclude: /node_modules/,
-                    use: {
-                        // When multiple loader configuration needed
-                        loader: "svg-url-loader",
-                        options: { name: "[name].svg" },
-                    },
+                    type: "asset/inline",
                 },
                 {
                     test: /\.m?js/,
-                    resolve: {
-                        fullySpecified: false
-                    }
+                    resolve: { fullySpecified: false }
                 }
             ],
         },
         plugins: [
-            // list of additional plugins
             new webpack.ProvidePlugin({
                 process: "process/browser",
                 Buffer: ["buffer", "Buffer"],
             }),
             new CopyPlugin({
                 patterns: [
-                    // { from: "src/logo.*", to: "../logos/[name][ext]" }, // Removed - logo file doesn't exist
                     { from: "public/", to: "../" },
                 ],
             }),
-            new Dotenv({
-                path: `${envFile}`,
-                safe: true,
-                allowEmptyValues: true, // allow empty variables (e.g. `FOO=`) (treat it as empty string, rather than missing)
-                systemvars: false, // load all the predefined 'process.env' variables which will trump anything local per dotenv specs.
-                silent: true, // hide any errors
-                defaults: false,
-                ignoreStub: true,
-            })
         ],
         resolve: {
-            // options for resolving module requests
-            // (does not apply to resolving of loaders)
-            symlinks: false,
-            extensions: [".tsx", ".ts", ".js", ".css", ".scss"], // extensions that are used
-            modules: ["./node_modules"], // directories where to look for modules (in order)
+            extensions: [".tsx", ".ts", ".js", ".css", ".scss"],
+            modules: ["./node_modules"],
+            // Follow symlinks to real path so webpack cache works correctly
+            symlinks: true,
             alias: {
-                // a list of module name aliases
-                // aliases are imported relative to the current context
                 process: "process/browser",
                 utils: path.resolve(__dirname, "./src/config/index"),
-                // alias for antd
                 antd: path.resolve(__dirname, 'node_modules/antd'),
-                // "@digital-assistant/core": path.resolve(__dirname, 'packages/core/dist/index.esm.js'),
+                // Point @digital-assistant/core directly to the real resolved path
+                '@digital-assistant/core': path.join(udanCorePath, 'dist/index.esm.js'),
             },
-            fallback: {
-                //fallback module dependencies
-                fs: false,
-                /*http: require.resolve("stream-http"),
-                https: require.resolve("https-browserify"),
-                stream: require.resolve("stream-browserify"),
-                zlib: require.resolve("browserify-zlib"),
-                buffer: require.resolve("buffer/"),
-                path: require.resolve("path-browserify"),
-                os: require.resolve("os-browserify/browser"),
-                assert: require.resolve("assert/"),
-                "process/browser": require.resolve("process/browser")*/
-            },
+            fallback: { fs: false },
         },
         output: {
-            // options related to how webpack emits results
             publicPath: "",
-            filename: "[name].js", // the filename template for entry chunks
+            filename: "[name].js",
             library: "UdanLibrary",
             libraryTarget: "var",
-            path: path.resolve(__dirname, buildPath + "/assets"), // the target directory for all output files
-            // must be an absolute path (use the Node.js path module)
+            path: path.resolve(__dirname, buildPath + "/assets"),
             clean: true,
         },
     };
 
-    if (env.build && env.build === "production") {
-        webpackConfig.mode = "production";
-        delete webpackConfig.devtool;
+    if (isProd) {
         webpackConfig.optimization = {
             nodeEnv: 'production',
+            splitChunks: false,
             minimizer: [
                 new CssMinimizerPlugin(),
                 new TerserPlugin({
-                    terserOptions: {
-                        compress: {
-                            drop_console: true, // remove console statement
-                        },
-                    },
+                    terserOptions: { compress: { drop_console: false } },
                 }),
             ],
         };
