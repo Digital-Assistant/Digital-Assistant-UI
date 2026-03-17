@@ -108,10 +108,10 @@
     "webpack-cli": "^6.0.1"
   },
   "scripts": {
-    "start": "webpack --watch",
-    "build": "webpack",
-    "build:dev": "webpack --env build=development",
-    "build:prod": "webpack --env build=production",
-    "build:qa": "webpack --env build=qa"
+    "start": "cd UDAN-Core && npm run build && cd .. && webpack --watch",
+    "build": "cd UDAN-Core && npm run build && cd .. && webpack",
+    "build:dev": "cd UDAN-Core && npm run build:dev && cd .. && webpack --env build=development",
+    "build:prod": "cd UDAN-Core && npm run build:prod && cd .. && webpack --env build=production",
+    "build:qa": "cd UDAN-Core && npm run build:qa && cd .. && webpack --env build=qa"
   }
 }

@@ -1,0 +1,1 @@
+var UdanLibrary;(()=>{var e;let n=document.createElement("script"),t=null==(e=chrome)||null==(e=e.runtime)?void 0:e.getURL("assets/UDAHeaders.js");n.src=t,n.onload=function(){},(document.head||document.documentElement).appendChild(n),UdanLibrary={}})();
