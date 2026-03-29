@@ -1,0 +1,83 @@
+/**
+ * UDA Custom Theme - Sample Override File
+ *
+ * Usage (via URL):
+ *   UDAPluginSDK({
+ *     enableCustomCSS: true,
+ *     customCSS: 'https://your-domain.com/uda-custom-theme-sample.css'
+ *   });
+ *
+ * Usage (via raw CSS string):
+ *   UDAPluginSDK({
+ *     enableCustomCSS: true,
+ *     customCSS: `:host { --widget-button-primary-bg: 210 100% 45%; }`
+ *   });
+ *
+ * Usage (via customTheme map):
+ *   UDAPluginSDK({
+ *     enableCustomCSS: true,
+ *     customTheme: {
+ *       '--widget-button-primary-bg': '210 100% 45%',
+ *       '--widget-panel-bg': '220 15% 97%'
+ *     }
+ *   });
+ *
+ * All overridable tokens are listed below. Values use HSL format: H S% L%
+ * Uncomment and adjust the ones you want to change.
+ */
+
+:host {
+  /* --- Panel --- */
+  --widget-panel-bg: 220 15% 97%;           /* Panel background */
+  /* --widget-panel-border: 220 15% 88%; */
+  /* --widget-panel-shadow: 0 0% 0% / 0.15; */
+
+  /* --- Text --- */
+  --widget-text-primary: 220 20% 15%;       /* Primary text */
+  /* --widget-text-secondary: 220 10% 50%; */
+  /* --widget-text-on-dark: 0 0% 100%; */
+
+  /* --- Buttons --- */
+  --widget-button-primary-bg: 210 100% 45%; /* Primary button background (blue) */
+  --widget-button-primary-text: 0 0% 100%;  /* Primary button text */
+  /* --widget-button-hover-opacity: 0.8; */
+
+  /* --- Icons --- */
+  /* --widget-icon-primary: 210 100% 45%; */
+  /* --widget-icon-secondary: 220 10% 55%; */
+  /* --widget-icon-disabled: 0 0% 80%; */
+  /* --widget-icon-active: 210 100% 45%; */
+
+  /* --- Input fields --- */
+  /* --widget-input-bg: 0 0% 95%; */
+  /* --widget-input-border: 220 15% 82%; */
+  /* --widget-input-shadow: 0 0% 0% / 0.1; */
+
+  /* --- Tabs --- */
+  --widget-tab-active-bg: 210 100% 45%;     /* Active tab background */
+  --widget-tab-active-text: 0 0% 100%;      /* Active tab text */
+  /* --widget-tab-inactive-bg: 0 0% 100%; */
+  /* --widget-tab-inactive-text: 220 20% 15%; */
+  /* --widget-tab-inactive-border: 220 15% 85%; */
+
+  /* --- Cards --- */
+  /* --widget-card-bg: 0 0% 100%; */
+  /* --widget-card-border: 220 15% 90%; */
+  /* --widget-card-hover-shadow: 210 100% 45% / 0.1; */
+
+  /* --- Dialogs --- */
+  /* --widget-dialog-bg: 0 0% 100%; */
+  /* --widget-dialog-overlay: 0 0% 0% / 0.5; */
+  /* --widget-dialog-border: 220 15% 85%; */
+
+  /* --- Status --- */
+  /* --widget-status-success: 128 69% 44%; */
+  /* --widget-status-error: 359 100% 70%; */
+  /* --widget-status-warning: 39 100% 50%; */
+  /* --widget-status-info: 211 100% 50%; */
+
+  /* --- Border radius --- */
+  /* --widget-radius-sm: 4px; */
+  /* --widget-radius-md: 8px; */
+  /* --widget-radius-lg: 12px; */
+}

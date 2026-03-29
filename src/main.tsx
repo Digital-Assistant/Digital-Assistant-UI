@@ -1,5 +1,6 @@
 import {createRoot} from "react-dom/client";
 import App from "./App";
+import { injectTheme, ThemePayload } from "./utils/ThemeInjector";
 
 // createRoot(document.getElementById("root")!).render(<App />);
 
@@ -43,4 +44,23 @@ shadowRoot.appendChild(reactDiv);
 
 const reactRoot = createRoot(shadowRoot);
 reactRoot.render(<App />);
+
+// Listen for config updates — inject custom CSS and apply dark mode into the shadow root
+window.addEventListener('UDAConfigUpdated', (e: Event) => {
+  const payload = (e as CustomEvent<ThemePayload>).detail;
+  if (payload) {
+    injectTheme(shadowRoot, payload);
+  }
+});
+
+// Also respond to OS-level dark mode changes (e.g. user switches system theme)
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  const appRoot = shadowRoot.getElementById('udan-react-app-root');
+  // Only auto-switch if the widget hasn't been explicitly configured via enableDarkMode
+  // i.e. if no UDAConfigUpdated event has set a preference yet, follow the OS
+  if (appRoot && !appRoot.dataset.themeManaged) {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    appRoot.classList.toggle('dark', prefersDark);
+  }
+});
   
