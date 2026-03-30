@@ -157,6 +157,7 @@ export function Layout({
             ...getPositionStyle(),
             cursor: isDragging ? 'grabbing' : 'default',
             overflow: 'hidden', // Changed from auto to hidden
+            zIndex: 2147483647,
           }}
         >
           {/* Header - Fixed at top */}
