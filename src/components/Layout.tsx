@@ -138,9 +138,10 @@ export function Layout({
 
   return (
     <div className="bg-[#f6f6f6] min-h-screen flex items-center p-4">
-      {/* Floating Button — shown when panel is hidden AND enableUdaIcon is true (or not set).
-           Also shown when panel is minimized during recording (enableUDAIconDuringRecording). */}
-      {(!isPanelVisible || minimizeForRecording) && config?.enableUdaIcon !== false && (
+      {/* Floating Button — shown when:
+           1. Panel is hidden and enableUdaIcon is true (or not set), OR
+           2. Panel is minimized during recording (always show so user can reopen) */}
+      {((!isPanelVisible && config?.enableUdaIcon !== false) || minimizeForRecording) && (
         <FloatingButton
           customIcon={config?.enableCustomIcon ? config?.customIcon : undefined}
           onOpen={onFloatingButtonClick}
