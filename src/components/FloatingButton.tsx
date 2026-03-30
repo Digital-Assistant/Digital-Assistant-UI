@@ -90,12 +90,13 @@ export function FloatingButton({ customIcon, onOpen }: { customIcon?: string; on
       ref={buttonRef}
       onMouseDown={handleMouseDown}
       onClick={handleClick}
-      className="bg-white border-2 border-[#d9d9d9] rounded-full shadow-2xl hover:shadow-xl transition-all duration-300 hover:scale-105 z-50"
+      className="bg-white border-2 border-[#d9d9d9] rounded-full shadow-2xl hover:shadow-xl transition-all duration-300 hover:scale-105"
       style={{
         ...getPositionStyle(),
         cursor: isDragging ? 'grabbing' : 'grab',
         width: '64px',
         height: '64px',
+        zIndex: 2147483647,
       }}
       aria-label="Open UDAN panel"
       title="Click to open UDAN | Drag to move"
