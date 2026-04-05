@@ -30,19 +30,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(true);
     setUser(data.detail.data);
     DigitalAssistantCoreSDK.dispatch(setUserData(data.detail.data));
-    // Toggle panel logic is not directly applicable here as we are in the panel UI itself, 
-    // but we might need to notify other parts of the app.
   }, []);
 
   const clearSession = useCallback(async () => {
     await authManager.logout();
     setIsAuthenticated(false);
     setUser(null);
-    trigger("RequestUDASessionData", {
-      detail: { data: "getusersessiondata" },
-      bubbles: false,
-      cancelable: false,
-    });
+    // Do NOT trigger RequestUDASessionData here — that causes a retry loop on 401
   }, []);
 
   useEffect(() => {
@@ -117,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       off("UDAGetNewToken", clearSession);
       unsubscribe();
     };
-  }, [isAuthenticated, createSession, clearSession]);
+  }, []); // run once on mount only — isAuthenticated changes must not re-register listeners
 
   const login = () => {
     authManager.init();

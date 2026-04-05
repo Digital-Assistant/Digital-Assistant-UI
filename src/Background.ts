@@ -46,41 +46,53 @@ browserVar.tabs.onActivated.addListener(function (activeInfo) {
 let sessionData: UDASessionData = new UDASessionData();
 
 // listen for the requests made from webpage for accessing userdata
-browserVar.runtime.onMessage.addListener(async function (request, sender, sendResponse) {
-	if (request.action === "getusersessiondata" || request.action === "UDAGetNewToken") {
-		const storedSessionData = await UDAStorageService.get(UDASessionName);
-		if (!storedSessionData) {
-			sessionData = await UDAGetSessionKey(sessionData);
-			await LoginWithBrowser(sessionData, false);
-		} else {
-			// looks like browser storage might have changed so changing the reading the data has been changed. For to work with old version have added the new code to else if statement
-			if (storedSessionData.hasOwnProperty("sessionKey") && storedSessionData["sessionKey"] && typeof storedSessionData["sessionKey"] != 'object') {
-				sessionData = storedSessionData;
-				if(request.action === "UDAGetNewToken"){
-					await generateNewToken();
-				} else if(storedSessionData.hasOwnProperty('authenticated') && storedSessionData.authenticated) {
-					await UDASendSessionData(sessionData);
-				} else {
-					await LoginWithBrowser(sessionData, false);
-				}
-			} else if (storedSessionData.hasOwnProperty(UDASessionName) && storedSessionData[UDASessionName].hasOwnProperty("sessionKey") && storedSessionData[UDASessionName]["sessionKey"] && typeof storedSessionData[UDASessionName]["sessionKey"] != 'object') {
-				sessionData = storedSessionData[UDASessionName];
-				if(storedSessionData.hasOwnProperty('authenticated') && storedSessionData.authenticated) {
-					await UDASendSessionData(sessionData);
-				} else {
-					await LoginWithBrowser(sessionData, false);
-				}
-			} else {
+browserVar.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+	const handleMessage = async () => {
+		if (request.action === "getusersessiondata" || request.action === "UDAGetNewToken") {
+			const storedSessionData = await UDAStorageService.get(UDASessionName);
+			if (!storedSessionData) {
 				sessionData = await UDAGetSessionKey(sessionData);
 				await LoginWithBrowser(sessionData, false);
+			} else {
+				// looks like browser storage might have changed so changing the reading the data has been changed. For to work with old version have added the new code to else if statement
+				if (storedSessionData.hasOwnProperty("sessionKey") && storedSessionData["sessionKey"] && typeof storedSessionData["sessionKey"] != 'object') {
+					sessionData = storedSessionData;
+					if (request.action === "UDAGetNewToken") {
+						await generateNewToken();
+					} else if (storedSessionData.hasOwnProperty('authenticated') && storedSessionData.authenticated) {
+						await UDASendSessionData(sessionData);
+					} else {
+						await LoginWithBrowser(sessionData, false);
+					}
+				} else if (storedSessionData.hasOwnProperty(UDASessionName) && storedSessionData[UDASessionName].hasOwnProperty("sessionKey") && storedSessionData[UDASessionName]["sessionKey"] && typeof storedSessionData[UDASessionName]["sessionKey"] != 'object') {
+					sessionData = storedSessionData[UDASessionName];
+					if (storedSessionData.hasOwnProperty('authenticated') && storedSessionData.authenticated) {
+						await UDASendSessionData(sessionData);
+					} else {
+						await LoginWithBrowser(sessionData, false);
+					}
+				} else {
+					sessionData = await UDAGetSessionKey(sessionData);
+					await LoginWithBrowser(sessionData, false);
+				}
 			}
+		} else if (request.action === "authtenicate") {
+			await LoginWithBrowser(sessionData, false);
+		} else if (request.action === "createSession") {
+			await keyCloakStore(sessionData, request.data);
 		}
+	};
 
-	} else if (request.action === "authtenicate") {
-		await LoginWithBrowser(sessionData, false);
-	} else if (request.action === "createSession") {
-		await keyCloakStore(sessionData, request.data);
-	}
+	handleMessage()
+		.then(() => sendResponse({ success: true }))
+		.catch((err) => {
+			const error = err instanceof Error ? err : new Error(String(err));
+			console.error("[UDA Background] onMessage error:", error);
+			sendResponse({ success: false, error: error.message });
+		});
+
+	// Return true to keep the message channel open for async sendResponse
+	return true;
 });
 
 async function generateNewToken() {

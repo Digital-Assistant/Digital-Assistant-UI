@@ -51,6 +51,9 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
   }, [searchKeyword]);
 
   const loadingRef = useRef(false);
+  const hasMorePagesRef = useRef(true);
+  const initialLoadDone = useRef(false);
+  const getSearchResultsRef = useRef<(page?: number, refetch?: boolean) => Promise<void>>();
 
   // SDK Subscription to keep selectedRecording in sync during playback
   useEffect(() => {
@@ -74,6 +77,7 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
     if (_page === 0 && refetch) {
       setSearchResults([]);
       setHasMorePages(true);
+      hasMorePagesRef.current = true;
     }
 
     if (loadingRef.current && !refetch) return;
@@ -83,21 +87,18 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
 
     try {
       let domain = fetchDomain();
-      // Assuming fetchSearchResultsSDK signature from App.tsx matches fetchSearchResults here or similar
-      // Adjust params as per core package definition
       const response = await fetchSearchResults({
-        keyword: debouncedKeyword, // Use debounced keyword
+        keyword: debouncedKeyword,
         page: _page,
         domain: encodeURI(domain),
-        // Add additional params locally if needed, similar to App.tsx logic
       });
 
-      // App.tsx logic suggests response is an array of recordings
       const newRecordings = response || [];
 
       if (newRecordings.length > 0) {
-        setHasMorePages(newRecordings.length >= CONFIG.enableInfiniteScrollPageLength);
-
+        const more = newRecordings.length >= CONFIG.enableInfiniteScrollPageLength;
+        setHasMorePages(more);
+        hasMorePagesRef.current = more;
         setSearchResults(prev => {
           if (_page === 0) return newRecordings;
           return [...prev, ...newRecordings];
@@ -105,14 +106,22 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
         setPage(_page);
       } else {
         setHasMorePages(false);
+        hasMorePagesRef.current = false;
       }
     } catch (error) {
       console.error("Error fetching recordings:", error);
+      setHasMorePages(false);
+      hasMorePagesRef.current = false;
     } finally {
       loadingRef.current = false;
       setIsLoading(false);
     }
-  }, [isAuthenticated, isInitialized, debouncedKeyword]); // Depend on debouncedKeyword directly
+  }, [isAuthenticated, isInitialized, debouncedKeyword]);
+
+  // Keep ref in sync so the IntersectionObserver always calls the latest version
+  useEffect(() => {
+    getSearchResultsRef.current = getSearchResults;
+  }, [getSearchResults]);
 
   // Handle Deep Linking (URL Query params)
   useEffect(() => {
@@ -144,29 +153,21 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
     initDeepLink();
   }, [isAuthenticated, isInitialized]);
 
-  // Refetch search when permissions-related config flags change at runtime
+  // Initial load & Search trigger — only run once auth is ready or keyword changes
   useEffect(() => {
     if (isInitialized && isAuthenticated) {
+      initialLoadDone.current = false; // reset so keyword change re-fetches
       getSearchResults(0, true);
+      initialLoadDone.current = true;
     }
-  }, [
-    (typeof window !== 'undefined' && (window as any).UDAGlobalConfig?.enablePermissions),
-    (typeof window !== 'undefined' && (window as any).UDAGlobalConfig?.enableForAllDomains),
-  ]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isInitialized, isAuthenticated, debouncedKeyword]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Initial load & Search trigger
-  useEffect(() => {
-    if (isInitialized && isAuthenticated) {
-      getSearchResults(0, true);
-    }
-  }, [getSearchResults, isInitialized, isAuthenticated]); // getSearchResults now depends on debouncedKeyword
-
-  // Infinite Scroll Observer
+  // Infinite Scroll Observer — stable, never re-registers on loading state changes
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting && hasMorePages && !isLoading) {
-          getSearchResults(page + 1);
+        if (entries[0].isIntersecting && hasMorePagesRef.current && !loadingRef.current) {
+          getSearchResultsRef.current?.(page + 1);
         }
       },
       { threshold: 0.1 }
@@ -176,12 +177,8 @@ export function SearchResults({ searchKeyword = "" }: SearchResultsProps) {
       observer.observe(observerTarget.current);
     }
 
-    return () => {
-      if (observerTarget.current) {
-        observer.unobserve(observerTarget.current);
-      }
-    };
-  }, [hasMorePages, isLoading, page, getSearchResults]);
+    return () => observer.disconnect();
+  }, [page]); // only re-register when page changes
 
 
   // If a recording is selected, show the detail view
